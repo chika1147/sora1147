@@ -1,0 +1,38 @@
+name: Publish ZeroNT beta update
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'zeront-update/_package-source/**'
+      - '.github/workflows/zeront-publish-update.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild signed package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat zeront-update/_package-source/package.xz.b64.part* > /tmp/zeront.pkg.xz.b64
+          base64 -d /tmp/zeront.pkg.xz.b64 > /tmp/zeront.pkg.xz
+          xz -d -c /tmp/zeront.pkg.xz > zeront-update/beta/x86_64/zeront-v1.2.0.pkg
+          echo "d9a2a5a841ead97f6f4bc90be56cedce8d9ef00ea792402fc021423be34183d0  zeront-update/beta/x86_64/zeront-v1.2.0.pkg" | sha256sum -c -
+          test "$(stat -c '%s' zeront-update/beta/x86_64/zeront-v1.2.0.pkg)" = "50240"
+      - name: Commit generated package
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add zeront-update/beta/x86_64/zeront-v1.2.0.pkg
+          if git diff --cached --quiet; then
+            echo "Package already published"
+            exit 0
+          fi
+          git commit -m "Publish ZeroNT v1.2.0 beta package"
+          git push

@@ -1,0 +1,9 @@
+{
+  "os": "ZeroNT",
+  "schema": 1,
+  "channels": {
+    "beta": {
+      "x86_64": "/chika1147/sora1147/main/zeront-update/beta/x86_64/manifest.json"
+    }
+  }
+}

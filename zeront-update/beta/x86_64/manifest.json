@@ -1,0 +1,11 @@
+{
+  "latest_version": "1.2.0",
+  "build": 1200,
+  "architecture": "x86_64",
+  "channel": "beta",
+  "download_path": "/chika1147/sora1147/main/zeront-update/beta/x86_64/zeront-v1.2.0.pkg",
+  "download_url": "https://raw.githubusercontent.com/chika1147/sora1147/main/zeront-update/beta/x86_64/zeront-v1.2.0.pkg",
+  "size": 50240,
+  "package_sha256": "d9a2a5a841ead97f6f4bc90be56cedce8d9ef00ea792402fc021423be34183d0",
+  "package_signature": "0108c0b8eae308a81d8792628bbfc8060fe11f062dfe1ce9fa034289e2292adda0a6d0fab3e6428b3eb64a77a631c1edb84de564c10f7a6072ad63f8efb49307"
+}
