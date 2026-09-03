@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f5f5f5">
+  <title>ZeroNT Update</title>
+  <link rel="stylesheet" href="./web.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="ZeroNT Settings navigation">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">Z</div>
+        <div>
+          <strong>ZeroNT</strong>
+          <span>Settings</span>
+        </div>
+      </div>
+
+      <nav class="nav-list">
+        <a class="nav-item" href="#overview"><span>⌂</span> System</a>
+        <a class="nav-item" href="#details"><span>◫</span> About</a>
+        <a class="nav-item active" href="#update" aria-current="page"><span>↻</span> ZeroNT Update</a>
+        <a class="nav-item" href="#security"><span>◇</span> Security</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="server-dot" id="sidebarDot"></div>
+        <span id="sidebarStatus">Checking server…</span>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="page-header" id="overview">
+        <div>
+          <p class="eyebrow">SYSTEM</p>
+          <h1>ZeroNT Update</h1>
+          <p class="subtitle">ZeroNT OS の更新状態を確認し、安全な署名済みパッケージを取得します。</p>
+        </div>
+        <button class="icon-button" id="themeButton" type="button" aria-label="テーマを切り替える">◐</button>
+      </header>
+
+      <section class="hero-card" id="update" aria-live="polite">
+        <div class="hero-icon" id="heroIcon" aria-hidden="true">↻</div>
+        <div class="hero-copy">
+          <p class="status-label" id="statusLabel">UPDATE STATUS</p>
+          <h2 id="statusTitle">更新情報を確認しています…</h2>
+          <p id="statusMessage">公開Update Serverからmanifestを取得しています。</p>
+          <div class="hero-actions">
+            <button class="primary-button" id="checkButton" type="button">更新を確認</button>
+            <a class="secondary-button disabled" id="downloadButton" href="#" aria-disabled="true">更新をダウンロード</a>
+          </div>
+        </div>
+        <div class="status-badge" id="statusBadge"><span class="pulse"></span> Checking</div>
+      </section>
+
+      <section class="section-block" id="details">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">AVAILABLE UPDATE</p>
+            <h2>リリース情報</h2>
+          </div>
+          <span class="channel-pill" id="channelPill">—</span>
+        </div>
+
+        <div class="info-grid">
+          <article class="info-card">
+            <span class="info-label">Latest version</span>
+            <strong id="versionValue">—</strong>
+            <small>ZeroNT OS</small>
+          </article>
+          <article class="info-card">
+            <span class="info-label">Build</span>
+            <strong id="buildValue">—</strong>
+            <small>Release build</small>
+          </article>
+          <article class="info-card">
+            <span class="info-label">Architecture</span>
+            <strong id="archValue">—</strong>
+            <small>Target platform</small>
+          </article>
+          <article class="info-card">
+            <span class="info-label">Package size</span>
+            <strong id="sizeValue">—</strong>
+            <small>Download size</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="security-card" id="security">
+        <div class="security-icon" aria-hidden="true">✓</div>
+        <div class="security-content">
+          <p class="eyebrow">SECURITY</p>
+          <h2>署名付きアップデート</h2>
+          <p>ZeroNTはパッケージを適用する前にSHA-256とEd25519署名を検証します。</p>
+          <div class="hash-box">
+            <span>Package SHA-256</span>
+            <code id="shaValue">—</code>
+            <button id="copyShaButton" type="button">Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="server-card">
+        <div>
+          <p class="eyebrow">UPDATE SERVER</p>
+          <h2>Server status</h2>
+        </div>
+        <div class="server-status-row">
+          <div>
+            <span class="server-light" id="serverLight"></span>
+            <strong id="serverStatus">Checking…</strong>
+          </div>
+          <div class="server-meta">
+            <span>Channel</span><strong id="serverChannel">—</strong>
+            <span>Last checked</span><strong id="lastChecked">—</strong>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <span>ZeroNT Update Server</span>
+        <a href="./beta/x86_64/manifest.json">manifest.json</a>
+        <a href="https://github.com/chika1147/sora1147/tree/main/zeront-update">Source</a>
+      </footer>
+    </main>
+  </div>
+
+  <script src="./web.js" defer></script>
+</body>
+</html>
