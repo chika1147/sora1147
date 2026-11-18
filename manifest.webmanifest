@@ -1,0 +1,1 @@
+{"name":"ZeroAI — 完全オフライン","short_name":"ZeroAI","description":"自作GPTを端末内で実行するWebアプリ","id":"./","start_url":"./","scope":"./","display":"standalone","background_color":"#091526","theme_color":"#091526","icons":[{"src":"icon.png","sizes":"192x192","type":"image/png","purpose":"any maskable"}]}
