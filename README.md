@@ -1,14 +1,12 @@
-# ZeroAI Offline Web
-ZeroAIのブラウザ推論版（Windows/iPhone対応）。
+# ZeroAI v1.7 — Offline Web
 
-## 注意
-- 公開するのはアプリのソースコードだけです。
-- `v15_best.pt`、`weights.bin`、`manifest.json`、`tokenizer.json`をGitHubに公開しないでください。
-- 学習済みモデルはブラウザで選択して読み込み、端末内のIndexedDBに保存します。
-- 推論には外部AI API、RAG、通信を使いません。
-- 初回のページ取得はオンラインで行い、以後のオフライン起動はブラウザのキャッシュ状況に依存します。
-- iPhone実機での動作は未検証です。
-- Windows向けZeroAI v1.6のすべての機能を移したアプリではありません。
+アップデート済みのWeb推論エンジン。元の学習済みモデルの重みは変更せず、IndexedDB保存済みモデルを継続利用。
 
-## GitHub Pages公開設定
-Settings → Pages → Build and deployment → Deploy from a branch → gh-pages → /(root) → Save。
+- 複数候補の生成（1〜4、既定2。1番目はv1.6方式のgreedy）。
+- GPTの平均対数確率 + 質問語との一致による順位付け。**事実の正しさを保証しない**。
+- Pythonの関数形式/数値範囲についての**簡易構造チェック**。Web版でPythonコードは実行しない。構文の厳密な検証も行わない。
+- 候補の詳細表示と `zeroai_web_results_v17.json` エクスポート。Windowsの `compare_v17.py --web-results ...` から比較可能。
+- 外部AI API/RAG/学習なし。学習済みモデルは公開しない。
+- 変換後のモデル（manifest.json,tokenizer.json,weights.bin）はローカルファイルから読み込ませる。GitHub Pagesに公開しない。
+- 生成はCPU上のJS計算なので候補数を増やすと時間がかかる。バッテリー/発熱に注意。
+- オフラインの動作確認は機内モードで。ブラウザがキャッシュを削除すると再ダウンロードが必要となる場合がある。

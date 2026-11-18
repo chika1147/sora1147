@@ -108,6 +108,16 @@ class Session {
     return m.matvec('wte.weight',m.norm(x,'lnf.weight','lnf.bias'));
   }
   prefill(ids) {let logits=null;for(const id of ids)logits=this.step(id);return logits;}
+  clone() {
+    // Share one prompt prefill across multiple independently generated replies.
+    const result=new Session(this.m);
+    result.pos=this.pos;
+    for(let i=0;i<this.keys.length;i++) {
+      result.keys[i].set(this.keys[i]);
+      result.vals[i].set(this.vals[i]);
+    }
+    return result;
+  }
 }
 export function sample(logits,temperature=0.5,topK=20,topP=0.95) {
   if(temperature<=0)throw Error('Temperature must be positive');

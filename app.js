@@ -1,7 +1,8 @@
 const $=id=>document.getElementById(id);
 const status=$('status'), message=$('message'), output=$('output');
-const dbName='zeroai-offline-v1';
+const dbName='zeroai-offline-v1'; // v1.6 IndexedDB checkpoint remains intact!
 let worker=null,loaded=false,busy=false;
+const comparisons=[];
 function show(s,type='info'){status.textContent=s;status.dataset.state=type;}
 function setBusy(value){busy=value;$('send').disabled=value||!loaded;$('stop').disabled=!value;$('text').disabled=value;}
 function dbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(dbName,1);r.onupgradeneeded=()=>r.result.createObjectStore('model');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
@@ -12,15 +13,18 @@ async function sha256(buffer){const digest=await crypto.subtle.digest('SHA-256',
 async function loadCurrentModel(){
   const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
-  if(worker) worker.terminate();
+  if(worker)worker.terminate();
   loaded=false;worker=new Worker('./engine.worker.js',{type:'module'});
   worker.onmessage=e=>{
     const d=e.data;
-    if(d.type==='ready'){loaded=true;show(`ZeroAI準備完了｜${d.step} step｜文脈${d.context} tokens`,'ok');setBusy(false);}
+    if(d.type==='ready'){loaded=true;show(`ZeroAI v1.7準備完了｜${d.step} step｜文脈${d.context} tokens`,'ok');setBusy(false);}
     if(d.type==='notice'){message.textContent=d.text;}
     if(d.type==='progress'){output.textContent=d.output;}
     if(d.type==='done'){
-      output.textContent=d.output||'（空の回答）';message.textContent=`ZeroAI自身が${d.tokens}トークン生成しました。`;
+      output.textContent=d.output||'（空の回答）';
+      message.textContent=`${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
+      $('diagnostics').textContent=d.candidates.map((c,i)=>`候補${i+1}${c.selected?' 【採用】':''}  score=${c.score.toFixed(3)}  logp=${c.avgLogprob.toFixed(3)}  ${c.source||'原文'}\n${c.reason}\n${c.text}`).join('\n\n');
+      comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:'v1.7-web'});
       setBusy(false);
       if($('speak').checked&&d.output&&!/```/.test(d.output)){
         speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(d.output);say.lang='ja-JP';say.rate=0.95;speechSynthesis.speak(say);
@@ -35,31 +39,38 @@ async function loadCurrentModel(){
 $('import').addEventListener('change',async e=>{
   const files=Array.from(e.target.files||[]);
   if(!files.length)return;
-  try {
+  try{
     const byName=Object.fromEntries(files.map(f=>[f.name,f]));
     const manFile=byName['manifest.json'],tokFile=byName['tokenizer.json'],weightFile=byName['weights.bin'];
     if(!manFile||!tokFile||!weightFile)throw Error('manifest.json / tokenizer.json / weights.bin の3つを選んでね');
     show('モデルの整合性を確認中…');
     const man=JSON.parse(await manFile.text()),tokText=await tokFile.text(),tok=JSON.parse(tokText),bin=await weightFile.arrayBuffer();
     if(man.format!=='zeroai-iphone-f32-v1'||man.dtype!=='float32-le')throw Error('ZeroAIの変換済みモデルではありません');
-    if(man.weight_float_count*4!==bin.byteLength)throw Error('モデルのサイズが不一致です');
+    if(man.weight_float_count*4!==bin.byteLength)throw Error('モデルサイズが不一致です');
     const [tokHash,weightHash]=await Promise.all([sha256(new TextEncoder().encode(tokText)),sha256(bin)]);
-    if(man.tokenizer_sha256!==tokHash)throw Error('トークナイザが学習済みモデルと一致しません');
-    if(man.weights_sha256!==weightHash)throw Error('重みのSHA256が一致しません');
-    // Save only after full validation; IndexedDB stores model bytes locally on the iPhone.
+    if(man.tokenizer_sha256!==tokHash||man.weights_sha256!==weightHash)throw Error('重みかトークナイザのSHA256が一致しません');
     await dbPut('manifest',man);await dbPut('tokenizer',tok);await dbPut('weights',bin);
     show('モデルを端末に保存したよ！','ok');await loadCurrentModel();
-  } catch(error){show(String(error?.message||error),'error');}
+  }catch(error){show(String(error?.message||error),'error');}
   e.target.value='';
 });
 $('send').addEventListener('click',()=>{
   if(!loaded||busy)return;
   const question=$('text').value.trim();if(!question)return;
-  output.textContent='';message.textContent='端末内で生成中。通信は使用しません。';setBusy(true);
-  worker.postMessage({type:'generate',question,maxTokens:Number($('maxTokens').value),temperature:Number($('temperature').value),topK:Math.max(1,Number($('topK').value)),topP:0.95});
+  output.textContent='';message.textContent='端末内で候補生成中。通信は使用しません。';setBusy(true);
+  worker.postMessage({type:'generate',question,maxTokens:Number($('maxTokens').value),
+    temperature:Number($('temperature').value),topK:Math.max(1,Number($('topK').value)),
+    candidates:Number($('candidates').value),topP:0.95,codeMode:$('codeMode').checked||/(Python|コード|関数|def\s+)/i.test(question)});
 });
 $('stop').addEventListener('click',()=>{if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
 $('clear').addEventListener('click',async()=>{if(!confirm('端末に保存したモデルを削除しますか？'))return;await dbClear();if(worker)worker.terminate();worker=null;loaded=false;output.textContent='';show('モデルを削除しました。');setBusy(false);});
 $('read').addEventListener('click',()=>{const text=output.textContent.trim();if(!text)return;speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(text);say.lang='ja-JP';speechSynthesis.speak(say);});
-if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1')) navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('Offline cache unavailable',e));
+$('export').addEventListener('click',()=>{
+  if(!comparisons.length){message.textContent='まず1つ以上の質問を生成してね。';return;}
+  const blob=new Blob([JSON.stringify({version:'v1.7-web',records:comparisons},null,2)],{type:'application/json'});
+  const link=document.createElement('a');link.href=URL.createObjectURL(blob);
+  link.download='zeroai_web_results_v17.json';link.click();URL.revokeObjectURL(link.href);
+});
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
+  navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
