@@ -125,6 +125,16 @@ for(const label of [...$('zeroInput').querySelectorAll('label[style]')])$('zeroM
 for(const id of ['mathCheck','read','export']){
   const node=$(id);if(node)$('zeroModel').append(node);
 }
+const contextSelect=$('contextLimit');
+const contextLabel=$('zeroContextLabel');
+function refreshContextLabel(){
+  if(!contextLabel||!contextSelect)return;
+  const limit=Number(contextSelect.value);
+  contextLabel.textContent=limit===512
+    ? 'v1.8 · 推論上限512（安定版） / 学習時512'
+    : 'v1.8 · 推論上限10,000（実験版） / 学習時512';
+}
+if(contextSelect){contextSelect.addEventListener('change',refreshContextLabel);refreshContextLabel();}
 const status=$('status');
 if(status?.textContent){
   const text=status.textContent;
