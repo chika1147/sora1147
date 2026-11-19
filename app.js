@@ -86,7 +86,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?mathfix=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?bigint=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
