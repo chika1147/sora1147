@@ -17,6 +17,10 @@ body{background:#212121;color:#ececec;overflow:hidden}
 #zeroHistory button{border:0;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 #zeroHistory button.active{background:#303030}
 .zero-sidebar small{color:#888;padding:8px;font-size:11px}
+#zeroModel .context-explain{color:#d5c9b6;font-size:12px;line-height:1.65;margin:8px 0 16px}
+#zeroModel select{font-size:14px;color:#f4f4f4;background:#222;border:1px solid #666;border-radius:8px;padding:8px 10px;max-width:100%}
+#zeroModel{z-index:12}
+
 .zero-history-item{display:flex;align-items:center;min-width:0;border-radius:12px}
 .zero-history-item:has(>button.active){background:#303030}
 .zero-history-item>button:first-child{flex:1;min-width:0}
@@ -63,8 +67,8 @@ body{background:#212121;color:#ececec;overflow:hidden}
 <label class="upload">モデル3ファイルを選ぶ<input id="import" type="file" multiple accept=".bin,.json,application/json,application/octet-stream"></label>
 <button class="danger" id="clear" type="button">モデル削除</button></section>
 <section class="card" id="zeroInput"><label for="text">ZeroAIに話しかける</label><textarea id="text" placeholder="こんにちは！あなたの名前は？"></textarea>
-<div class="settings"><div class="setting"><label for="maxTokens">最大トークン</label><input id="maxTokens" type="number" min="8" max="160" value="64"></div><div class="setting"><label for="temperature">Temperature</label><input id="temperature" type="number" min="0.1" max="2" step="0.05" value="0.62"></div><div class="setting"><label for="topK">Top-k</label><input id="topK" type="number" min="1" max="100" value="25"></div><div class="setting"><label for="candidates">候補数</label><input id="candidates" type="number" min="1" max="4" value="2"></div></div>
+<div class="settings"><div class="setting"><label for="maxTokens">最大トークン</label><input id="maxTokens" type="number" min="8" max="160" value="64"></div><div class="setting"><label for="temperature">Temperature</label><input id="temperature" type="number" min="0.1" max="2" step="0.05" value="0.62"></div><div class="setting"><label for="topK">Top-k</label><input id="topK" type="number" min="1" max="100" value="25"></div><div class="setting"><label for="candidates">候補数</label><input id="candidates" type="number" min="1" max="4" value="2"></div><div class="setting"><label for="contextLimit">推論文脈の上限</label><select id="contextLimit" aria-label="推論文脈上限"><option value="10000" selected>10,000 tokens（実験版）</option><option value="512">512 tokens（安定版）</option></select></div><p class="context-explain">10,000トークンを1回の推論で扱います。512トークンで学習したモデルの位置情報を補間するため、長文回答の品質と動作速度は保証されません。大きな入力では候補を1件に制限します。</p></div>
 <label style="font-weight:400"><input id="codeMode" type="checkbox"> Pythonコード検証モード（構造・限定的な静的検算）</label><label style="font-weight:400;margin-top:8px"><input id="mathMode" type="checkbox" checked> 簡単な文章問題も自動検算（数式は常にローカル計算）</label><div class="actions"><button class="secondary" id="mathCheck" type="button">125×24 の計算テスト</button><button id="send" disabled>ZeroAIで生成</button><button id="stop" class="secondary" disabled>停止</button></div><label style="font-weight:400"><input id="speak" type="checkbox"> 日本語の返事を読み上げる（端末の声を使用）</label></section>
 <section class="card" id="zeroResult"><label>ZeroAIの返事</label><div id="message"></div><pre id="output" class="answer">モデルを取り込むとここに返事が出ます。</pre><div class="actions"><button class="secondary" id="read">読み上げ</button><button class="secondary" id="export">比較結果を保存（JSON）</button></div><details><summary>候補の比較・判定理由を表示</summary><pre id="diagnostics" class="answer" style="font-size:12px"></pre></details></section>
 <footer id="zeroFooter">外部AI APIなし・RAGなし・追加学習なし。日本語とコードの候補をZeroAI自身が生成し、端末で比較します。Web版はJavaScriptのBigIntで安全に四則演算を行い、Pythonは実行しません。推論は端末のJavaScriptで実行されます。計算エンジンは対応できない文章問題では回答せず、GPTに任せます。回答の正確さと速度は保証されません。機密性が重要な場合はWi-Fiとモバイル通信をオフにしてテストしてください。</footer>
-</div></main></div><script src="chat_shell.js?longhistory=20261119" defer></script><script type="module" src="app.js?longhistory=20261119"></script></body></html>
+</div></main></div><script src="chat_shell.js?context10000=20261119" defer></script><script type="module" src="app.js?context10000=20261119"></script></body></html>
