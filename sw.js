@@ -1,8 +1,8 @@
 // ZeroAI v1.8 MathFix / cache updated JS and force offline-capable assets.
 // Revision bump invalidates prior v1.7/v1.8 cached math code.
-const CACHE='zeroai-offline-v1-8-chatfix-20261119';
+const CACHE='zeroai-offline-v1-8-longhistory-20261119';
 const APP=['./','./index.html','./app.js','./chat_shell.js','./engine.worker.js','./tokenizer.js',
- './model.js','./quality_v17.js','./quality_v18.js','./math_v18_fix.js',
+ './model.js','./quality_v17.js','./quality_v18.js','./math_v18_fix.js','./context_memory.js',
  './manifest.webmanifest','./icon.png','./icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(APP)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(async keys=>{
