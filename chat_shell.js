@@ -76,6 +76,7 @@ function makeProgressDetail(p){
   const stage=p.variants>1?`候補準備 ${p.variant}/${p.variants} · `:'';
   return stage+`${Number(p.done||0).toLocaleString()}/${Number(p.total||0).toLocaleString()} tokens`;
 }
+function setTopRuntime(text){const el=$('zeroTopState');if(el)el.textContent=text;}
 function updatePending(id,r){
   if(active!==r.chatId)return;
   const el=Array.from($('zeroThread').querySelectorAll('.zero-pending'))
@@ -115,27 +116,27 @@ window.addEventListener('zeroai:phase',event=>{
   const {id,text}=event.detail||{};
   const r=requests.get(id);if(!r)return;
   r.prefill=null;r.progress=String(text||'処理中…');
-  updatePending(id,r);
+  setTopRuntime('● 文章を解析中');updatePending(id,r);
 });
 window.addEventListener('zeroai:prefill',event=>{
   const {id,done,total,percent,variant,variants}=event.detail||{};
   const r=requests.get(id);if(!r)return;
   r.prefill={done,total,percent:Math.max(0,Math.min(100,Number(percent)||0)),variant,variants};
   r.progress=`文脈を読み込み中… ${r.prefill.percent}%`;
-  updatePending(id,r);
+  setTopRuntime('● 読込 '+r.prefill.percent+'%');updatePending(id,r);
 });
 window.addEventListener('zeroai:slow',event=>{
   const {id,text}=event.detail||{};
   const r=requests.get(id);if(!r)return;
   r.progress=String(text||'長時間計算しています。停止ボタンで中断できます。');
-  updatePending(id,r);
+  setTopRuntime('● 長文計算中');updatePending(id,r);
 });
 window.addEventListener('zeroai:progress',event=>{
   const {id,text}=event.detail||{};
   const r=requests.get(id);if(!r)return;
   r.prefill=null;
   r.progress=String(text||'回答を作成しています…');
-  updatePending(id,r);
+  setTopRuntime('● 回答生成中');updatePending(id,r);
   if(active===r.chatId)$('zeroThread').scrollTop=$('zeroThread').scrollHeight;
 });
 window.addEventListener('zeroai:answer',event=>{
@@ -144,6 +145,7 @@ window.addEventListener('zeroai:answer',event=>{
   const c=chats.find(c=>c.id===r.chatId);
   appendMessage(c,'assistant',answer||'（空の回答）');
   requests.delete(id);
+  setTopRuntime('● 準備完了');
   if(active===r.chatId)render();
 });
 window.addEventListener('zeroai:error',event=>{
@@ -152,6 +154,7 @@ window.addEventListener('zeroai:error',event=>{
   const c=chats.find(c=>c.id===r.chatId);
   appendMessage(c,'assistant','エラー：'+String(error||'回答を生成できませんでした'));
   requests.delete(id);
+  setTopRuntime('● 停止・エラー');
   if(active===r.chatId)render();
 });
 window.addEventListener('zeroai:status',event=>{
