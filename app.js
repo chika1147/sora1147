@@ -71,7 +71,6 @@ $('send').addEventListener('click',()=>{
   const history=typeof window.zeroaiGetHistory==='function'?window.zeroaiGetHistory():[];
   const requestId=++requestSequence;
   activeRequestId=requestId;
-  const priorHistory=typeof window.ZeroAIChatHistory==='function'?window.ZeroAIChatHistory():[];
   bridge('question',{id:requestId,question,source:local?'local_calculation':'model'});
   if(local){
     output.textContent=local.answer;
@@ -88,7 +87,7 @@ $('send').addEventListener('click',()=>{
   worker.postMessage({type:'generate',question,history,maxTokens:Number($('maxTokens').value),
     temperature:Number($('temperature').value),topK:Math.max(1,Number($('topK').value)),
     candidates:Number($('candidates').value),useMath:$('mathMode').checked,topP:0.95,codeMode:codeMode,
-    history:priorHistory,contextLimit:Math.max(512,Math.min(10000,Number($('contextLimit')?.value)||10000))});
+    contextLimit:Math.max(512,Math.min(10000,Number($('contextLimit')?.value)||10000))});
 });
 $('stop').addEventListener('click',()=>{if(activeRequestId!==null)bridge('error',{id:activeRequestId,error:'生成を停止しました。'});activeRequestId=null;if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
 $('clear').addEventListener('click',async()=>{if(!confirm('端末に保存したモデルを削除しますか？'))return;await dbClear();if(worker)worker.terminate();worker=null;loaded=false;output.textContent='';show('モデルを削除しました。');setBusy(false);});
