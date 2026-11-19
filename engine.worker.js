@@ -28,6 +28,7 @@ self.onmessage=async event=>{
       const contextLimit=Math.max(model.trainedContext,Math.min(model.maxContext,requestedLimit));
       const alt=codeMode?paraphraseNumericQuestion(question):null;
       let questions=codeMode?(alt?[question,alt]:[question]):[question,...relationParaphrases(question)];
+      report('phase',{stage:'tokenize',text:'文章をトークンに変換しています…'});
       const primary=makeConversationPrompt(tok,d.history,question,contextLimit,wantedOutput);
       const largePrompt=primary.ids.length>model.trainedContext;
       // Large prompts use one candidate; otherwise multiplying large KV caches
@@ -39,11 +40,24 @@ self.onmessage=async event=>{
       const maxNew=Math.min(wantedOutput,contextLimit-Math.max(...contextData.map(c=>c.ids.length)));
       if(maxNew<1)throw Error('No tokens left for generating the answer');
       report('notice',{text:`実験的な最大${contextLimit.toLocaleString()}トークン文脈で推論。学習時は${model.trainedContext}。今回${primary.ids.length}入力トークンを全注意で処理します。`});
-      const starts=contextData.map(ctx=>{
+      const starts=[];
+      for(let i=0;i<contextData.length;i++){
+        const ctx=contextData[i];
         const capacity=Math.min(contextLimit,ctx.ids.length+wantedOutput);
         const session=model.session(capacity);
-        return {session,logits:session.prefill(ctx.ids),length:ctx.ids.length,ctx};
-      });
+        // Token-by-token real full-attention prefill. Report actual processed
+        // token counts, not an artificial countdown/estimated progress.
+        const logits=await session.prefillAsync(ctx.ids,{
+          yieldEvery:ctx.ids.length>1000?2:8,
+          progressEvery:ctx.ids.length>1000?4:16,
+          onProgress:(done,total)=>report('prefill',{
+            done,total,variant:i+1,variants:contextData.length,
+            percent:Math.round(done*100/Math.max(1,total)),
+            trainedContext:model.trainedContext,contextLimit
+          })
+        });
+        starts.push({session,logits,length:ctx.ids.length,ctx});
+      }
       const stopIds=new Set([tok.special['<end>'],tok.special['<user>'],tok.special['<bot>'],tok.special['<eof>']]);
       const candidates=[];
       for(let c=0;c<nCandidates;c++){
@@ -67,6 +81,7 @@ self.onmessage=async event=>{
         }
         candidates.push({text:tok.decode(result),tokens:result.length,avgLogprob:result.length?sumLP/result.length:-100,stopped,source:useAlt?'言い換え':'原文'});
       }
+      report('phase',{stage:'rank',text:'生成結果を確認しています…'});
       const result=rankV18(question,candidates,codeMode);
       const picked=candidates[result.index];
       report('done',{output:picked.text,tokens:picked.tokens,
