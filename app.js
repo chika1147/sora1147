@@ -29,7 +29,7 @@ async function loadCurrentModel(){
   const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?context10000=20261119',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?longfast=20261120',{type:'module'});
   worker.onmessage=e=>{
     const d=e.data;
     if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8 実験的推論文脈 最大${d.context.toLocaleString()} tokens｜学習時${d.trainedContext} tokens｜${d.step} step`,'ok');setBusy(false);}
@@ -117,7 +117,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?context10000=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?longfast=20261120',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
