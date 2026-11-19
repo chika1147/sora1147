@@ -76,8 +76,11 @@ class Session {
     // Allocate only the capacity this request actually uses, not always 10k.
     this.keys=Array.from({length:n_layer},()=>new Float32Array(capacity*n_embd));
     this.vals=Array.from({length:n_layer},()=>new Float32Array(capacity*n_embd));
+    // Reuse one attention score buffer across heads and layers. Avoid
+    // 6 * 8 fresh Float32Array allocations for every input token.
+    this.attentionScores=new Float32Array(capacity);
   }
-  step(token) {
+  step(token,emitLogits=true) {
     const m=this.m,c=m.cfg,dim=c.n_embd,nHeads=c.n_head,hDim=dim/nHeads,position=this.pos;
     if(position>=this.capacity) throw Error('Context full (max '+this.capacity+' tokens)');
     if(token<0||token>=c.vocab_size) throw Error('Invalid token ID');
@@ -101,7 +104,7 @@ class Session {
       for(let d=0;d<dim;d++){cacheK[off+d]=qkv[dim+d];cacheV[off+d]=qkv[2*dim+d];}
       const attention=new Float32Array(dim),scale=1/Math.sqrt(hDim);
       for(let h=0;h<nHeads;h++) {
-        const head=h*hDim, scores=new Float32Array(position+1);
+        const head=h*hDim, scores=this.attentionScores;
         let max=-Infinity;
         for(let t=0;t<=position;t++) {
           let s=0,base=t*dim+head;
@@ -125,9 +128,36 @@ class Session {
       for(let d=0;d<dim;d++)x[d]+=h2[d];
     }
     this.pos++;
+    // During prefill only the FINAL prompt token needs vocabulary logits.
+    // Skipping this ~8192 x 384 projection for all prior prompt tokens is
+    // mathematically exact: subsequent token states use KV caches only.
+    if(!emitLogits)return null;
     return m.matvec('wte.weight',m.norm(x,'lnf.weight','lnf.bias'));
   }
-  prefill(ids) {let logits=null;for(const id of ids)logits=this.step(id);return logits;}
+  prefill(ids) {
+    let logits=null;
+    for(let i=0;i<ids.length;i++)logits=this.step(ids[i],i===ids.length-1);
+    return logits;
+  }
+  async prefillAsync(ids,{onProgress=null,yieldEvery=4,progressEvery=16}={}) {
+    if(!Array.isArray(ids)||ids.length===0)throw Error('Empty prompt');
+    // Web Worker computation still runs off the UI thread. Yield every few
+    // tokens to dispatch progress messages; on main thread STOP terminates
+    // this Worker immediately even during an individual model.step().
+    const batch=Math.max(1,Math.min(32,Math.trunc(yieldEvery)||4));
+    const reportEvery=Math.max(1,Math.trunc(progressEvery)||16);
+    let logits=null;
+    if(onProgress)onProgress(0,ids.length);
+    for(let i=0;i<ids.length;i++){
+      logits=this.step(ids[i],i===ids.length-1);
+      const done=i+1;
+      if(onProgress&&(done===ids.length||done%reportEvery===0))onProgress(done,ids.length);
+      if(done%batch===0&&done<ids.length){
+        await new Promise(resolve=>setTimeout(resolve,0));
+      }
+    }
+    return logits;
+  }
   clone() {
     // Share one prompt prefill across multiple independently generated replies.
     const result=new Session(this.m,this.capacity);
