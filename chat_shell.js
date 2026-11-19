@@ -14,6 +14,12 @@ function persist(){
   catch(error){console.warn('Chat history could not be saved:',error);}
 }
 function current(){return chats.find(c=>c.id===active)||null;}
+// Returns prior messages only. The Worker limits retained history to exactly
+// 10k BPE tokens and limits simultaneous inference to the trained 512 tokens.
+window.zeroaiGetHistory=()=>{
+  const c=current();
+  return c?c.messages.slice(-800).filter(m=>m&&(['user','assistant'].includes(m.role))).map(m=>({role:m.role,text:String(m.text||'')})):[];
+};
 function closeMenu(){document.querySelector('.zero-sidebar')?.classList.remove('open');}
 function newChat(){
   const c={id:String(Date.now())+'-'+Math.random().toString(36).slice(2),title:'新しいチャット',messages:[]};
