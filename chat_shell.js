@@ -14,8 +14,8 @@ function persist(){
   catch(error){console.warn('Chat history could not be saved:',error);}
 }
 function current(){return chats.find(c=>c.id===active)||null;}
-// Returns prior messages only. The Worker limits retained history to exactly
-// 10k BPE tokens and limits simultaneous inference to the trained 512 tokens.
+// The worker restricts stored dialogue to 10k BPE tokens. Its experimental
+// inference attention can span 10k tokens; the original training used 512.
 window.zeroaiGetHistory=()=>{
   const c=current();
   return c?c.messages.slice(-800).filter(m=>m&&(['user','assistant'].includes(m.role))).map(m=>({role:m.role,text:String(m.text||'')})):[];
@@ -61,9 +61,32 @@ function render(){
   for(const [id,r] of requests){
     if(r.chatId!==active)continue;
     const d=document.createElement('div');d.className='zero-msg assistant zero-pending';d.dataset.requestId=String(id);
-    d.textContent=r.progress||'考え中…';thread.append(d);
+    const label=document.createElement('div');label.className='zero-pending-text';
+    label.textContent=r.progress||'考え中…';
+    const bar=document.createElement('progress');bar.className='zero-prefill-bar';
+    bar.max=100;bar.value=r.prefill?.percent||0;bar.hidden=!r.prefill;
+    bar.setAttribute('aria-label','入力文章の読み込み進捗');
+    const detail=document.createElement('div');detail.className='zero-progress-detail';
+    detail.textContent=r.prefill?makeProgressDetail(r.prefill):'';
+    d.append(label,bar,detail);thread.append(d);
   }
   thread.scrollTop=thread.scrollHeight;
+}
+function makeProgressDetail(p){
+  const stage=p.variants>1?`候補準備 ${p.variant}/${p.variants} · `:'';
+  return stage+`${Number(p.done||0).toLocaleString()}/${Number(p.total||0).toLocaleString()} tokens`;
+}
+function updatePending(id,r){
+  if(active!==r.chatId)return;
+  const el=Array.from($('zeroThread').querySelectorAll('.zero-pending'))
+    .find(e=>e.dataset.requestId===String(id));
+  if(!el)return;
+  const label=el.querySelector('.zero-pending-text');
+  if(label)label.textContent=r.progress||'考え中…';
+  const bar=el.querySelector('.zero-prefill-bar');
+  if(bar){bar.hidden=!r.prefill;if(r.prefill)bar.value=r.prefill.percent||0;}
+  const detail=el.querySelector('.zero-progress-detail');
+  if(detail)detail.textContent=r.prefill?makeProgressDetail(r.prefill):'';
 }
 $('zeroNew').onclick=newChat;
 $('zeroMenu').onclick=()=>document.querySelector('.zero-sidebar').classList.toggle('open');
@@ -88,14 +111,32 @@ window.addEventListener('zeroai:question',event=>{
   $('text').value='';
   render();
 });
+window.addEventListener('zeroai:phase',event=>{
+  const {id,text}=event.detail||{};
+  const r=requests.get(id);if(!r)return;
+  r.prefill=null;r.progress=String(text||'処理中…');
+  updatePending(id,r);
+});
+window.addEventListener('zeroai:prefill',event=>{
+  const {id,done,total,percent,variant,variants}=event.detail||{};
+  const r=requests.get(id);if(!r)return;
+  r.prefill={done,total,percent:Math.max(0,Math.min(100,Number(percent)||0)),variant,variants};
+  r.progress=`文脈を読み込み中… ${r.prefill.percent}%`;
+  updatePending(id,r);
+});
+window.addEventListener('zeroai:slow',event=>{
+  const {id,text}=event.detail||{};
+  const r=requests.get(id);if(!r)return;
+  r.progress=String(text||'長時間計算しています。停止ボタンで中断できます。');
+  updatePending(id,r);
+});
 window.addEventListener('zeroai:progress',event=>{
   const {id,text}=event.detail||{};
   const r=requests.get(id);if(!r)return;
-  r.progress=String(text||'考え中…');
-  if(active===r.chatId){
-    const el=Array.from($('zeroThread').querySelectorAll('.zero-pending')).find(e=>e.dataset.requestId===String(id));
-    if(el){el.textContent=r.progress;$('zeroThread').scrollTop=$('zeroThread').scrollHeight;}
-  }
+  r.prefill=null;
+  r.progress=String(text||'回答を作成しています…');
+  updatePending(id,r);
+  if(active===r.chatId)$('zeroThread').scrollTop=$('zeroThread').scrollHeight;
 });
 window.addEventListener('zeroai:answer',event=>{
   const {id,answer}=event.detail||{};
