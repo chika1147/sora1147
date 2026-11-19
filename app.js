@@ -6,6 +6,17 @@ let worker=null,loaded=false,busy=false;
 const comparisons=[];
 // Chat shell event bridge. The engine stays independent of the UI.
 let requestSequence=0,activeRequestId=null;
+let inactivityWarningTimer=null;
+function clearInactivityWarning(){if(inactivityWarningTimer!==null)clearTimeout(inactivityWarningTimer);inactivityWarningTimer=null;}
+function markWorkerAlive(){
+  clearInactivityWarning();
+  if(activeRequestId!==null){
+    const requestId=activeRequestId;
+    inactivityWarningTimer=setTimeout(()=>{
+      if(activeRequestId===requestId)bridge('slow',{id:requestId,text:'処理が長引いています。画面が動くなら停止できます。'});
+    },45000);
+  }
+}
 function bridge(type,detail={}){window.dispatchEvent(new CustomEvent('zeroai:'+type,{detail}));}
 function show(s,type='info'){status.textContent=s;status.dataset.state=type;bridge('status',{text:s,state:type});}
 function setBusy(value){busy=value;$('send').disabled=value||!loaded;$('stop').disabled=!value;$('text').disabled=value;}
@@ -22,9 +33,15 @@ async function loadCurrentModel(){
   worker.onmessage=e=>{
     const d=e.data;
     if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8 実験的推論文脈 最大${d.context.toLocaleString()} tokens｜学習時${d.trainedContext} tokens｜${d.step} step`,'ok');setBusy(false);}
-    if(d.type==='notice'){message.textContent=d.text;}
-    if(d.type==='progress'){output.textContent=d.output;bridge('progress',{id:activeRequestId,text:d.output||''});}
+    if(d.type==='notice'){message.textContent=d.text;markWorkerAlive();}
+    if(d.type==='phase'){message.textContent=d.text;markWorkerAlive();bridge('phase',{id:activeRequestId,stage:d.stage,text:d.text});}
+    if(d.type==='prefill'){
+      markWorkerAlive();
+      bridge('prefill',{id:activeRequestId,done:d.done,total:d.total,percent:d.percent,variant:d.variant,variants:d.variants});
+    }
+    if(d.type==='progress'){markWorkerAlive();output.textContent=d.output;bridge('progress',{id:activeRequestId,text:d.output||''});}
     if(d.type==='done'){
+      clearInactivityWarning();
       output.textContent=d.output||'（空の回答）';
       message.textContent=d.source==='local_calculation' ? (d.math.kind==='arithmetic_error' ? `計算不可：${d.math.answer}（ZeroAIの推測は使っていません）` : `【Webローカル計算で検証済み】${d.math.expression} = ${d.math.value}（AIの推測ではありません）`) : `${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
       $('diagnostics').textContent=d.candidates.map((c,i)=>`候補${i+1}${c.selected?' 【採用】':''}  score=${c.score.toFixed(3)}  logp=${c.avgLogprob.toFixed(3)}  ${c.source||'原文'}\n${c.reason}\n${c.text}`).join('\n\n');
@@ -36,9 +53,9 @@ async function loadCurrentModel(){
         speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(d.output);say.lang='ja-JP';say.rate=0.95;speechSynthesis.speak(say);
       }
     }
-    if(d.type==='error'){show(d.error,'error');bridge('error',{id:activeRequestId,error:d.error});activeRequestId=null;setBusy(false);}
+    if(d.type==='error'){clearInactivityWarning();show(d.error,'error');bridge('error',{id:activeRequestId,error:d.error});activeRequestId=null;setBusy(false);}
   };
-  worker.onerror=e=>{const err='推論エラー：'+e.message;show(err,'error');bridge('error',{id:activeRequestId,error:err});activeRequestId=null;setBusy(false);};
+  worker.onerror=e=>{clearInactivityWarning();const err='推論エラー：'+e.message;show(err,'error');bridge('error',{id:activeRequestId,error:err});activeRequestId=null;setBusy(false);};
   show('モデルを読み込み中…');
   const copied=bin.slice(0);worker.postMessage({type:'load',manifest:man,tokenizer:tok,weights:copied},[copied]);
 }
@@ -84,12 +101,13 @@ $('send').addEventListener('click',()=>{
     return;
   }
   output.textContent='';message.textContent='端末内で候補生成中。通信は使用しません。';setBusy(true);
+  markWorkerAlive();
   worker.postMessage({type:'generate',question,history,maxTokens:Number($('maxTokens').value),
     temperature:Number($('temperature').value),topK:Math.max(1,Number($('topK').value)),
     candidates:Number($('candidates').value),useMath:$('mathMode').checked,topP:0.95,codeMode:codeMode,
     contextLimit:Math.max(512,Math.min(10000,Number($('contextLimit')?.value)||10000))});
 });
-$('stop').addEventListener('click',()=>{if(activeRequestId!==null)bridge('error',{id:activeRequestId,error:'生成を停止しました。'});activeRequestId=null;if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
+$('stop').addEventListener('click',()=>{clearInactivityWarning();if(activeRequestId!==null)bridge('error',{id:activeRequestId,error:'生成を停止しました。'});activeRequestId=null;if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
 $('clear').addEventListener('click',async()=>{if(!confirm('端末に保存したモデルを削除しますか？'))return;await dbClear();if(worker)worker.terminate();worker=null;loaded=false;output.textContent='';show('モデルを削除しました。');setBusy(false);});
 $('read').addEventListener('click',()=>{const text=output.textContent.trim();if(!text)return;speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(text);say.lang='ja-JP';speechSynthesis.speak(say);});
 $('export').addEventListener('click',()=>{
