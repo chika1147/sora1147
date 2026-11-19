@@ -23,6 +23,11 @@ export class ZeroAIModel {
     this.w=new Float32Array(bytes);
     this.tensors=manifest.tensors;
     this.cfg=t;
+    // Experimental inference-only extension. Training positional embeddings remain 512.
+    // Full causal attention may span 10,000 positions, but long-context accuracy
+    // is untrained and large prompts are expensive on CPU/mobile browsers.
+    this.trainedContext=t.block_size;
+    this.maxContext=10000;
     for(const [name,entry] of Object.entries(this.tensors)) {
       if(entry.offset<0||entry.count<=0||entry.offset+entry.count>this.w.length) throw Error('Invalid tensor '+name);
     }
@@ -57,22 +62,37 @@ export class ZeroAIModel {
     for(let i=0;i<n;i++)out[i]=(input[i]-mean)*inv*this.w[w+i]+this.w[b+i];
     return out;
   }
-  session(){return new Session(this);}
+  session(capacity=this.trainedContext){return new Session(this,capacity);}
 }
 class Session {
-  constructor(model) {
+  constructor(model,capacity=model.trainedContext) {
     this.m=model; this.pos=0;
-    const {n_embd,block_size,n_layer}=model.cfg;
-    this.keys=Array.from({length:n_layer},()=>new Float32Array(block_size*n_embd));
-    this.vals=Array.from({length:n_layer},()=>new Float32Array(block_size*n_embd));
+    const {n_embd,n_layer}=model.cfg;
+    if(!Number.isSafeInteger(capacity)||capacity<1||capacity>model.maxContext)
+      throw Error('Context capacity must be 1..'+model.maxContext);
+    this.capacity=capacity;
+    this.positionScale=capacity<=model.trainedContext?1:
+      (model.trainedContext-1)/(capacity-1);
+    // Allocate only the capacity this request actually uses, not always 10k.
+    this.keys=Array.from({length:n_layer},()=>new Float32Array(capacity*n_embd));
+    this.vals=Array.from({length:n_layer},()=>new Float32Array(capacity*n_embd));
   }
   step(token) {
     const m=this.m,c=m.cfg,dim=c.n_embd,nHeads=c.n_head,hDim=dim/nHeads,position=this.pos;
-    if(position>=c.block_size) throw Error('Context full; begin a new message (max '+c.block_size+' tokens)');
+    if(position>=this.capacity) throw Error('Context full (max '+this.capacity+' tokens)');
     if(token<0||token>=c.vocab_size) throw Error('Invalid token ID');
-    const e=m.tensor('wte.weight').offset+token*dim,p=m.tensor('wpe.weight').offset+position*dim;
+    const e=m.tensor('wte.weight').offset+token*dim;
+    const posFloat=position*this.positionScale;
+    const lower=Math.min(m.trainedContext-1,Math.floor(posFloat));
+    const upper=Math.min(m.trainedContext-1,lower+1);
+    const mix=posFloat-lower;
+    const base=m.tensor('wpe.weight').offset;
+    const lo=base+lower*dim,hi=base+upper*dim;
     let x=new Float32Array(dim);
-    for(let d=0;d<dim;d++) x[d]=m.w[e+d]+m.w[p+d];
+    // Position interpolation extends physical attention length WITHOUT
+    // pretending the original 512-position model was trained on 10k texts.
+    for(let d=0;d<dim;d++)
+      x[d]=m.w[e+d]+m.w[lo+d]*(1-mix)+m.w[hi+d]*mix;
     for(let layer=0;layer<c.n_layer;layer++) {
       const prefix=`blocks.${layer}.`;
       const ln1=m.norm(x,prefix+'ln1.weight',prefix+'ln1.bias');
@@ -110,7 +130,7 @@ class Session {
   prefill(ids) {let logits=null;for(const id of ids)logits=this.step(id);return logits;}
   clone() {
     // Share one prompt prefill across multiple independently generated replies.
-    const result=new Session(this.m);
+    const result=new Session(this.m,this.capacity);
     result.pos=this.pos;
     for(let i=0;i<this.keys.length;i++) {
       result.keys[i].set(this.keys[i]);
