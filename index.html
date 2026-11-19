@@ -2,17 +2,58 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#09152a"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="icon.png">
-<title>ZeroAI v1.8 BigInt Fix — Offline Web</title>
+<title>ZeroAI — チャット</title>
 <style>
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif}*{box-sizing:border-box}body{background:radial-gradient(ellipse at top,#172d51,#091526 62%);color:#f5f7ff;margin:0;min-height:100dvh}main{max-width:660px;margin:0 auto;padding:24px 16px 60px}header{padding:16px 4px 24px;display:flex;align-items:center;gap:12px}.logo{width:50px;height:50px;border-radius:16px;background:linear-gradient(135deg,#55b8ff,#6264e4);display:grid;place-items:center;font-weight:900;font-size:22px}h1{font-size:22px;margin:0}header p{color:#bac9e4;margin:4px 0 0;font-size:13px}.card{background:#16263ccc;border:1px solid #405477;border-radius:18px;padding:18px;margin-bottom:16px;box-shadow:0 12px 40px #0003}label{display:block;font-weight:700;font-size:14px;margin:0 0 8px}p{line-height:1.65}small,.hint{font-size:12px;color:#aabbd4;line-height:1.6}button,.upload{border:0;border-radius:12px;padding:12px 17px;color:white;background:#4879eb;font-weight:700;font-size:15px}button:disabled{opacity:.4}button.secondary{background:#2b3c59}button.danger{background:#633d4f}.upload{display:inline-flex;align-items:center;justify-content:center;cursor:pointer}input[type=file]{display:none}textarea{width:100%;min-height:106px;resize:vertical;background:#0c1a2b;border:1px solid #52647e;border-radius:12px;color:white;font-size:16px;padding:12px}input[type=number]{width:86px;background:#0c1a2b;color:white;border:1px solid #52647e;border-radius:8px;padding:8px;font-size:15px}input[type=checkbox]{accent-color:#6e91fa}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.settings{display:flex;gap:14px;flex-wrap:wrap;align-items:end;padding:12px 0}.settings label{margin:0}.settings .setting{display:flex;flex-direction:column;gap:6px}.answer{white-space:pre-wrap;word-break:break-word;font-size:15px;line-height:1.7;min-height:70px;margin:0;color:#f2f7ff}#status{background:#293e57;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.6}#status[data-state=ok]{background:#173d3b}#status[data-state=error]{background:#672b44}#message{color:#b9c9e1;font-size:12px}footer{color:#91a9c8;font-size:12px;line-height:1.6;padding:6px}a{color:#a8cbff}
-</style></head><body><main>
-<header><div class="logo">Z</div><div><h1>ZeroAI v1.8 BigInt Fix</h1><p>Windows・iPhone対応／ローカルGPT</p></div></header>
-<section class="card"><label>モデルの状態</label><div id="status">モデルを確認しています…</div><p class="hint">初回のみ、添付のモデル3ファイルを取り込みます。取り込んだ後、回答の生成には通信しません。</p>
+
+/* ZeroAI ChatGPT-inspired responsive chat shell */
+body{background:#212121;color:#ececec;overflow:hidden}
+.zero-shell{display:flex;height:100dvh;width:100%;overflow:hidden}
+.zero-sidebar{width:264px;flex:0 0 264px;background:#171717;padding:20px 12px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+.zero-brand{font-weight:750;font-size:19px;padding:6px 10px}.zero-sidebar button{background:transparent;border:1px solid #404040;text-align:left;font-size:14px;padding:11px 12px;border-radius:12px;cursor:pointer}
+.zero-sidebar button:hover,.zeroExamples button:hover{background:#303030}
+.zero-subtitle{color:#a0a0a0;font-size:12px;margin:12px 10px 0}
+#zeroHistory{display:flex;flex-direction:column;gap:4px;flex:1;overflow-y:auto}
+#zeroHistory button{border:0;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+#zeroHistory button.active{background:#303030}
+.zero-sidebar small{color:#888;padding:8px;font-size:11px}
+.zero-shell main{max-width:none;flex:1;min-width:0;margin:0;padding:0;display:flex;flex-direction:column;position:relative;height:100dvh}
+.zero-top{height:62px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 22px;border-bottom:1px solid #303030}
+.zero-top strong{font-size:18px}.zero-top strong span{font-size:13px;color:#aaa;font-weight:400}
+#zeroTopState{margin-left:auto;font-size:12px;color:#b6b6b6}
+#zeroMenu{display:none;background:transparent;padding:6px}
+#zeroThread{flex:1;overflow-y:auto;padding:24px max(24px,calc((100% - 780px)/2));display:flex;flex-direction:column;gap:26px}
+#zeroWelcome{text-align:center;margin:auto 0;min-height:220px}
+.zero-symbol{font-size:45px}#zeroWelcome h2{font-size:25px;font-weight:600;margin:14px 0}#zeroWelcome p{color:#aaa}
+.zeroExamples{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:26px}
+.zeroExamples button{background:#2b2b2b;border:1px solid #454545;color:#eee;font-size:13px}
+.zero-msg{max-width:100%;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}
+.zero-msg.user{align-self:flex-end;background:#303030;border-radius:18px;padding:12px 17px;max-width:83%}
+.zero-msg.assistant{align-self:stretch;padding:5px 0 14px}
+.zero-msg.assistant:before{content:"✳  ZeroAI";display:block;font-size:13px;font-weight:700;margin-bottom:8px;color:#d8d8d8}
+#zeroComposer{flex-shrink:0;width:100%;padding:10px max(18px,calc((100% - 780px)/2)) 16px}
+#zeroOldHeader,#zeroFooter,#zeroResult{display:none}
+#zeroModel{display:none;position:absolute;z-index:10;top:72px;right:20px;max-width:min(520px,calc(100% - 40px));background:#292929;box-shadow:0 16px 60px #000a}
+#zeroModel.open{display:block}
+#zeroInput{background:#303030;border:1px solid #474747;box-shadow:none;border-radius:22px;padding:10px 13px;margin:0}
+#zeroInput>label:first-child,#zeroInput .settings,#zeroInput>label[style],#zeroInput .actions #mathCheck{display:none!important}
+#zeroInput textarea{background:transparent;border:0;min-height:56px;max-height:160px;outline:none;resize:vertical;padding:12px 8px;color:#fff}
+#zeroInput .actions{justify-content:flex-end;margin:2px 0}
+#zeroInput .actions button{border-radius:22px;padding:9px 18px;background:#ececec;color:#222}
+#zeroInput .actions #stop{background:#4b4b4b;color:#fff}
+#zeroInput .actions button:disabled{opacity:.45}
+#zeroInput .card{border:0}
+#zeroModel .hint{color:#bbb}
+#zeroInput,#zeroModel{color:#ececec}
+@media(max-width:760px){.zero-sidebar{position:absolute;z-index:20;left:0;top:0;bottom:0;transform:translateX(-100%);transition:transform .2s}.zero-sidebar.open{transform:translateX(0)}#zeroMenu{display:block}.zero-top{padding:0 14px}#zeroThread{padding:16px 18px}#zeroComposer{padding:8px 12px 12px}.zero-msg.user{max-width:92%}}
+</style></head><body><div class="zero-shell"><aside class="zero-sidebar"><div class="zero-brand">✳ ZeroAI</div><button id="zeroNew" type="button">＋ 新しいチャット</button><div class="zero-subtitle">最近のチャット</div><nav id="zeroHistory"></nav><button id="zeroSettings" type="button">⚙ 設定・モデル管理</button><small>端末内で動く自作AI · v1.8</small></aside><main><div class="zero-top"><button id="zeroMenu" type="button" aria-label="メニュー">☰</button><strong>ZeroAI <span>v1.8</span></strong><span id="zeroTopState">ローカルAI</span></div><div id="zeroThread" role="log" aria-live="polite"><div id="zeroWelcome"><div class="zero-symbol">✳</div><h2>今日は何を話そうか？</h2><p>ZeroAIはあなたの端末で動く自作AIです。</p><div class="zeroExamples"><button data-q="こんにちは！あなたの名前は？">✦ 自己紹介して</button><button data-q="125 × 24 + 350">∑ 計算してみる</button><button data-q="東京はどこの国の首都ですか？">◇ 日本語で質問</button></div></div></div><div id="zeroComposer">
+<header id="zeroOldHeader"><div class="logo">Z</div><div><h1>ZeroAI v1.8 BigInt Fix</h1><p>Windows・iPhone対応／ローカルGPT</p></div></header>
+<section class="card" id="zeroModel"><label>モデルの状態</label><div id="status">モデルを確認しています…</div><p class="hint">初回のみ、添付のモデル3ファイルを取り込みます。取り込んだ後、回答の生成には通信しません。</p>
 <label class="upload">モデル3ファイルを選ぶ<input id="import" type="file" multiple accept=".bin,.json,application/json,application/octet-stream"></label>
 <button class="danger" id="clear" type="button">モデル削除</button></section>
-<section class="card"><label for="text">ZeroAIに話しかける</label><textarea id="text" placeholder="こんにちは！あなたの名前は？"></textarea>
+<section class="card" id="zeroInput"><label for="text">ZeroAIに話しかける</label><textarea id="text" placeholder="こんにちは！あなたの名前は？"></textarea>
 <div class="settings"><div class="setting"><label for="maxTokens">最大トークン</label><input id="maxTokens" type="number" min="8" max="160" value="64"></div><div class="setting"><label for="temperature">Temperature</label><input id="temperature" type="number" min="0.1" max="2" step="0.05" value="0.62"></div><div class="setting"><label for="topK">Top-k</label><input id="topK" type="number" min="1" max="100" value="25"></div><div class="setting"><label for="candidates">候補数</label><input id="candidates" type="number" min="1" max="4" value="2"></div></div>
 <label style="font-weight:400"><input id="codeMode" type="checkbox"> Pythonコード検証モード（構造・限定的な静的検算）</label><label style="font-weight:400;margin-top:8px"><input id="mathMode" type="checkbox" checked> 簡単な文章問題も自動検算（数式は常にローカル計算）</label><div class="actions"><button class="secondary" id="mathCheck" type="button">125×24 の計算テスト</button><button id="send" disabled>ZeroAIで生成</button><button id="stop" class="secondary" disabled>停止</button></div><label style="font-weight:400"><input id="speak" type="checkbox"> 日本語の返事を読み上げる（端末の声を使用）</label></section>
-<section class="card"><label>ZeroAIの返事</label><div id="message"></div><pre id="output" class="answer">モデルを取り込むとここに返事が出ます。</pre><div class="actions"><button class="secondary" id="read">読み上げ</button><button class="secondary" id="export">比較結果を保存（JSON）</button></div><details><summary>候補の比較・判定理由を表示</summary><pre id="diagnostics" class="answer" style="font-size:12px"></pre></details></section>
-<footer>外部AI APIなし・RAGなし・追加学習なし。日本語とコードの候補をZeroAI自身が生成し、端末で比較します。Web版はJavaScriptのBigIntで安全に四則演算を行い、Pythonは実行しません。推論は端末のJavaScriptで実行されます。計算エンジンは対応できない文章問題では回答せず、GPTに任せます。回答の正確さと速度は保証されません。機密性が重要な場合はWi-Fiとモバイル通信をオフにしてテストしてください。</footer>
-</main><script type="module" src="app.js?bigint=20261119"></script></body></html>
+<section class="card" id="zeroResult"><label>ZeroAIの返事</label><div id="message"></div><pre id="output" class="answer">モデルを取り込むとここに返事が出ます。</pre><div class="actions"><button class="secondary" id="read">読み上げ</button><button class="secondary" id="export">比較結果を保存（JSON）</button></div><details><summary>候補の比較・判定理由を表示</summary><pre id="diagnostics" class="answer" style="font-size:12px"></pre></details></section>
+<footer id="zeroFooter">外部AI APIなし・RAGなし・追加学習なし。日本語とコードの候補をZeroAI自身が生成し、端末で比較します。Web版はJavaScriptのBigIntで安全に四則演算を行い、Pythonは実行しません。推論は端末のJavaScriptで実行されます。計算エンジンは対応できない文章問題では回答せず、GPTに任せます。回答の正確さと速度は保証されません。機密性が重要な場合はWi-Fiとモバイル通信をオフにしてテストしてください。</footer>
+</div></main></div><script src="chat_shell.js?v=20261119" defer></script><script type="module" src="app.js?bigint=20261119"></script></body></html>
