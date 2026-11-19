@@ -18,10 +18,10 @@ async function loadCurrentModel(){
   const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?mathfix=20261119',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?longhistory=20261119',{type:'module'});
   worker.onmessage=e=>{
     const d=e.data;
-    if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8準備完了｜${d.step} step｜文脈${d.context} tokens`,'ok');setBusy(false);}
+    if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8準備完了｜${d.step} step｜モデル文脈 ${d.context} tokens｜会話履歴 最大${d.historyLimit||10000} tokens`,'ok');setBusy(false);}
     if(d.type==='notice'){message.textContent=d.text;}
     if(d.type==='progress'){output.textContent=d.output;bridge('progress',{id:activeRequestId,text:d.output||''});}
     if(d.type==='done'){
@@ -67,6 +67,8 @@ $('send').addEventListener('click',()=>{
   // or the optional word-problem checkbox is OFF.
   const codeMode=$('codeMode').checked||/(Python|コード|関数|def\s+)/i.test(question);
   const local=routeMath(question,{codeMode,wordProblems:$('mathMode').checked});
+  // Obtain past messages BEFORE dispatching this new user question.
+  const history=typeof window.zeroaiGetHistory==='function'?window.zeroaiGetHistory():[];
   const requestId=++requestSequence;
   activeRequestId=requestId;
   bridge('question',{id:requestId,question,source:local?'local_calculation':'model'});
@@ -82,7 +84,7 @@ $('send').addEventListener('click',()=>{
     return;
   }
   output.textContent='';message.textContent='端末内で候補生成中。通信は使用しません。';setBusy(true);
-  worker.postMessage({type:'generate',question,maxTokens:Number($('maxTokens').value),
+  worker.postMessage({type:'generate',question,history,maxTokens:Number($('maxTokens').value),
     temperature:Number($('temperature').value),topK:Math.max(1,Number($('topK').value)),
     candidates:Number($('candidates').value),useMath:$('mathMode').checked,topP:0.95,codeMode:codeMode});
 });
@@ -96,7 +98,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?chatfix=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?longhistory=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
