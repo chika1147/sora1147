@@ -14,7 +14,7 @@ self.onmessage=async event=>{
       model=new ZeroAIModel(d.manifest,d.weights);tok=new ByteLevelBPE(d.tokenizer);
       for(const [token,id] of Object.entries(d.manifest.special_token_ids))
         if(tok.special[token]!==id)throw Error('Tokenizer special ID mismatch: '+token);
-      report('ready',{step:d.manifest.checkpoint_step,vocab:model.cfg.vocab_size,context:model.cfg.block_size,historyLimit:HISTORY_TOKEN_LIMIT});
+      report('ready',{step:d.manifest.checkpoint_step,vocab:model.cfg.vocab_size,context:model.maxContext,trainedContext:model.trainedContext,historyLimit:HISTORY_TOKEN_LIMIT,experimental:true});
     }else if(d.type==='generate'){
       if(!model||!tok)throw Error('Model not loaded');
       const question=String(d.question||'').trim();
@@ -22,34 +22,42 @@ self.onmessage=async event=>{
       const codeMode=!!d.codeMode;
       const calculated=routeMath(question,{codeMode,wordProblems:!!d.useMath});
       if(calculated){report('done',{output:calculated.answer,tokens:0,candidates:[],verification:'ローカル四則演算（GPT生成ではありません）',source:'local_calculation',question,codeMode:false,math:calculated});return;}
-      const nCandidates=Math.max(1,Math.min(4,Math.trunc(Number(d.candidates)||1)));
-      const alt=codeMode?paraphraseNumericQuestion(question):null;
-      const questions=codeMode?(alt?[question,alt]:[question]):[question,...relationParaphrases(question)];
-      // Keep up to 10k tokens of dialogue history in the browser. The trained
-      // model still has 512 native positions: recent complete turns are used.
+      const requestedCandidates=Math.max(1,Math.min(4,Math.trunc(Number(d.candidates)||1)));
       const wantedOutput=Math.max(8,Math.min(160,Math.trunc(Number(d.maxTokens)||64)));
-      const contextData=questions.map(q=>makeConversationPrompt(
-        tok,d.history,q,model.cfg.block_size,wantedOutput));
-      report('notice',{text:`会話履歴最大10,000 tokens・推論窓${model.cfg.block_size} tokens。直近${contextData[0].keptTurns}往復を参照します。`});
+      const requestedLimit=Math.trunc(Number(d.contextLimit)||model.maxContext);
+      const contextLimit=Math.max(model.trainedContext,Math.min(model.maxContext,requestedLimit));
+      const alt=codeMode?paraphraseNumericQuestion(question):null;
+      let questions=codeMode?(alt?[question,alt]:[question]):[question,...relationParaphrases(question)];
+      const primary=makeConversationPrompt(tok,d.history,question,contextLimit,wantedOutput);
+      const largePrompt=primary.ids.length>model.trainedContext;
+      // Large prompts use one candidate; otherwise multiplying large KV caches
+      // by candidate count would exhaust phone and laptop browser memory.
+      if(largePrompt)questions=[question];
+      const nCandidates=largePrompt?1:requestedCandidates;
+      const contextData=questions.map((q,i)=>i===0?primary:makeConversationPrompt(
+        tok,d.history,q,contextLimit,wantedOutput));
+      const maxNew=Math.min(wantedOutput,contextLimit-Math.max(...contextData.map(c=>c.ids.length)));
+      if(maxNew<1)throw Error('No tokens left for generating the answer');
+      report('notice',{text:`実験的な最大${contextLimit.toLocaleString()}トークン文脈で推論。学習時は${model.trainedContext}。今回${primary.ids.length}入力トークンを全注意で処理します。`});
       const starts=contextData.map(ctx=>{
-        const session=model.session();
+        const capacity=Math.min(contextLimit,ctx.ids.length+wantedOutput);
+        const session=model.session(capacity);
         return {session,logits:session.prefill(ctx.ids),length:ctx.ids.length,ctx};
       });
-      const maxNew=Math.min(wantedOutput,model.cfg.block_size-Math.max(...starts.map(x=>x.length)));
       const stopIds=new Set([tok.special['<end>'],tok.special['<user>'],tok.special['<bot>'],tok.special['<eof>']]);
       const candidates=[];
       for(let c=0;c<nCandidates;c++){
         const variant=c%questions.length;
         const useAlt=variant!==0;
         const start=starts[variant];
-        const session=start.session.clone();let logits=start.logits;
+        const session=nCandidates===1?start.session:start.session.clone();let logits=start.logits;
         let result=[],sumLP=0,stopped=false;
         const deterministic=(c===0||(useAlt&&c===1));
         const temp=(deterministic?0.45:(Number(d.temperature)||0.62));
         const topK=(deterministic?1:Math.max(2,Number(d.topK)||25));
         const topP=(deterministic?1:(Number(d.topP)||0.95));
         report('notice',{text:`端末内で候補 ${c+1}/${nCandidates} を生成中…${useAlt?'（質問を言い換え）':''}`});
-        for(let t=0;t<maxNew&&session.pos<model.cfg.block_size;t++){
+        for(let t=0;t<maxNew&&session.pos<session.capacity;t++){
           const next=sample(logits,temp,topK,topP);
           if(stopIds.has(next)){stopped=true;break;}
           result.push(next);sumLP+=logProbability(logits,next);
@@ -65,10 +73,10 @@ self.onmessage=async event=>{
         bestIndex:result.index,candidates:candidates.map((c,i)=>({text:c.text,tokens:c.tokens,
         avgLogprob:c.avgLogprob,score:result.reports[i].score,reason:result.reports[i].reason,
         selected:i===result.index,source:c.source})),verification:result.reports[result.index].verification,source:'gpt',question,codeMode,
-        contextInfo:{historyLimit:HISTORY_TOKEN_LIMIT,nativeContext:model.cfg.block_size,
+        contextInfo:{historyLimit:HISTORY_TOKEN_LIMIT,inferenceContext:contextLimit,trainedContext:model.trainedContext,experimental:true,
         retainedHistoryTokens:contextData[0].retainedHistoryTokens,
         usedHistoryTokens:starts[result.index%starts.length]?.ctx.usedHistoryTokens||0,
-        keptTurns:contextData[0].keptTurns,
+        promptTokens:contextData[0].promptTokenCount,keptTurns:contextData[0].keptTurns,
         truncatedQuestion:contextData[0].truncatedQuestion}});
     }
   }catch(e){report('error',{error:String(e?.message||e)});}
