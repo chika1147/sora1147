@@ -4,7 +4,10 @@ const status=$('status'), message=$('message'), output=$('output');
 const dbName='zeroai-offline-v1'; // v1.6 IndexedDB checkpoint remains intact!
 let worker=null,loaded=false,busy=false;
 const comparisons=[];
-function show(s,type='info'){status.textContent=s;status.dataset.state=type;}
+// Chat shell event bridge. The engine stays independent of the UI.
+let requestSequence=0,activeRequestId=null;
+function bridge(type,detail={}){window.dispatchEvent(new CustomEvent('zeroai:'+type,{detail}));}
+function show(s,type='info'){status.textContent=s;status.dataset.state=type;bridge('status',{text:s,state:type});}
 function setBusy(value){busy=value;$('send').disabled=value||!loaded;$('stop').disabled=!value;$('text').disabled=value;}
 function dbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(dbName,1);r.onupgradeneeded=()=>r.result.createObjectStore('model');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function dbPut(name,value){const db=await dbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction('model','readwrite');tx.objectStore('model').put(value,name);tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>{db.close();reject(tx.error);};});}
@@ -20,20 +23,22 @@ async function loadCurrentModel(){
     const d=e.data;
     if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8準備完了｜${d.step} step｜文脈${d.context} tokens`,'ok');setBusy(false);}
     if(d.type==='notice'){message.textContent=d.text;}
-    if(d.type==='progress'){output.textContent=d.output;}
+    if(d.type==='progress'){output.textContent=d.output;bridge('progress',{id:activeRequestId,text:d.output||''});}
     if(d.type==='done'){
       output.textContent=d.output||'（空の回答）';
       message.textContent=d.source==='local_calculation' ? (d.math.kind==='arithmetic_error' ? `計算不可：${d.math.answer}（ZeroAIの推測は使っていません）` : `【Webローカル計算で検証済み】${d.math.expression} = ${d.math.value}（AIの推測ではありません）`) : `${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
       $('diagnostics').textContent=d.candidates.map((c,i)=>`候補${i+1}${c.selected?' 【採用】':''}  score=${c.score.toFixed(3)}  logp=${c.avgLogprob.toFixed(3)}  ${c.source||'原文'}\n${c.reason}\n${c.text}`).join('\n\n');
       comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:'v1.8-web'});
+      bridge('answer',{id:activeRequestId,question:d.question,answer:d.output||'（空の回答）',source:d.source||'model'});
+      activeRequestId=null;
       setBusy(false);
       if($('speak').checked&&d.output&&!/```/.test(d.output)){
         speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(d.output);say.lang='ja-JP';say.rate=0.95;speechSynthesis.speak(say);
       }
     }
-    if(d.type==='error'){show(d.error,'error');setBusy(false);}
+    if(d.type==='error'){show(d.error,'error');bridge('error',{id:activeRequestId,error:d.error});activeRequestId=null;setBusy(false);}
   };
-  worker.onerror=e=>{show('推論エラー：'+e.message,'error');setBusy(false);};
+  worker.onerror=e=>{const err='推論エラー：'+e.message;show(err,'error');bridge('error',{id:activeRequestId,error:err});activeRequestId=null;setBusy(false);};
   show('モデルを読み込み中…');
   const copied=bin.slice(0);worker.postMessage({type:'load',manifest:man,tokenizer:tok,weights:copied},[copied]);
 }
@@ -62,6 +67,9 @@ $('send').addEventListener('click',()=>{
   // or the optional word-problem checkbox is OFF.
   const codeMode=$('codeMode').checked||/(Python|コード|関数|def\s+)/i.test(question);
   const local=routeMath(question,{codeMode,wordProblems:$('mathMode').checked});
+  const requestId=++requestSequence;
+  activeRequestId=requestId;
+  bridge('question',{id:requestId,question,source:local?'local_calculation':'model'});
   if(local){
     output.textContent=local.answer;
     message.textContent=local.kind==='arithmetic_error'
@@ -69,6 +77,8 @@ $('send').addEventListener('click',()=>{
       : `【Webローカル計算で検証済み】${local.expression} = ${local.value} ／ AIによる推測回答ではありません。`;
     $('diagnostics').textContent=`入力: ${question}\n処理: ${local.kind}\n式: ${local.expression}\n結果: ${local.value||'計算不可'}\nエンジン: JavaScript BigInt (外部APIなし)`;
     comparisons.push({question,answer:local.answer,source:'local_calculation',expression:local.expression,value:local.value});
+    bridge('answer',{id:requestId,question,answer:local.answer,source:'local_calculation'});
+    activeRequestId=null;
     return;
   }
   output.textContent='';message.textContent='端末内で候補生成中。通信は使用しません。';setBusy(true);
@@ -76,7 +86,7 @@ $('send').addEventListener('click',()=>{
     temperature:Number($('temperature').value),topK:Math.max(1,Number($('topK').value)),
     candidates:Number($('candidates').value),useMath:$('mathMode').checked,topP:0.95,codeMode:codeMode});
 });
-$('stop').addEventListener('click',()=>{if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
+$('stop').addEventListener('click',()=>{if(activeRequestId!==null)bridge('error',{id:activeRequestId,error:'生成を停止しました。'});activeRequestId=null;if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
 $('clear').addEventListener('click',async()=>{if(!confirm('端末に保存したモデルを削除しますか？'))return;await dbClear();if(worker)worker.terminate();worker=null;loaded=false;output.textContent='';show('モデルを削除しました。');setBusy(false);});
 $('read').addEventListener('click',()=>{const text=output.textContent.trim();if(!text)return;speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(text);say.lang='ja-JP';speechSynthesis.speak(say);});
 $('export').addEventListener('click',()=>{
@@ -86,7 +96,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?bigint=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?chatfix=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
