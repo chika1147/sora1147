@@ -131,8 +131,8 @@ function refreshContextLabel(){
   if(!contextLabel||!contextSelect)return;
   const limit=Number(contextSelect.value);
   contextLabel.textContent=limit===512
-    ? 'v1.8 · 推論上限512（安定版） / 学習時512'
-    : 'v1.8 · 推論上限10,000（実験版） / 学習時512';
+    ? 'v1.8 · 推論512（安定版）'
+    : 'v1.8 · 推論10,000（実験版）';
 }
 if(contextSelect){contextSelect.addEventListener('change',refreshContextLabel);refreshContextLabel();}
 const status=$('status');
