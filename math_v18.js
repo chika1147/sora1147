@@ -2,7 +2,7 @@
 // Deliberately narrow parser; returns null rather than inventing an operation.
 export function evaluateExpression(expression){
   let q=String(expression).normalize('NFKC').replaceAll('×','*').replaceAll('÷','/').replace(/\s+/g,'');
-  if(!q||q.length>130||!/^[\d.+*/()\-]+$/.test(q))throw Error('未対応の数式');
+  if(!q||q.length>800||!/^[\d.+*/()\-]+$/.test(q))throw Error('未対応の数式');
   let t=q.match(/\d+(?:\.\d+)?|\.\d+|[()+*/\-]/g)||[];
   if(t.join('')!==q||t.length>70)throw Error('数式が複雑または不正です');
   let pos=0;
@@ -18,7 +18,8 @@ export function evaluateExpression(expression){
   function multiply(){let a=atom();while(t[pos]==='*'||t[pos]==='/'){let op=t[pos++],b=atom();a=op==='*'?mul(a,b):div(a,b);}return a;}
   function add(){let a=multiply();while(t[pos]==='+'||t[pos]==='-'){let op=t[pos++],b=multiply();a=sum(a,b,op==='-');}return a;}
   const a=add();if(pos!==t.length)throw Error('余分な文字があります');
-  if((a[0]<0n?-a[0]:a[0])>1000000000000000000n*a[1])throw Error('計算結果が大きすぎます');
+  // Exact BigInt arithmetic up to 299-digit integer results.
+  if((a[0]<0n?-a[0]:a[0]) >= (10n**300n)*a[1])throw Error('計算結果が300桁以上のため表示を制限しました');
   const sign=a[0]<0n?'-':'',n=a[0]<0n?-a[0]:a[0],whole=n/a[1],rem=n%a[1];
   if(rem===0n)return sign+whole.toString();
   let digits='',r=rem;
@@ -32,7 +33,7 @@ export function evaluateExpression(expression){
 }
 export function solveMath(question){
   const q=String(question).normalize('NFKC').trim();
-  if(!q||q.length>300||/Python|プログラム|コード|関数|スクリプト|実装/i.test(q))return null;
+  if(!q||q.length>850||/Python|プログラム|コード|関数|スクリプト|実装/i.test(q))return null;
   let s=q.replaceAll('×','*').replaceAll('÷','/').replaceAll('＋','+').replaceAll('−','-')
     .replace(/^(?:計算して|計算してください)\s*[:：]?\s*/,'')
     .replace(/\s*(?:の答えは|を計算してください|を計算して|は(?:いくつ|いくら)?|=)?[？?。!！]*\s*$/,'');
