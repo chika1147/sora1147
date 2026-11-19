@@ -19,7 +19,7 @@ $('zeroTopState').onclick=()=>{$('zeroModel').classList.toggle('open');};
 $('zeroTopState').style.cursor='pointer';
 $('text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('send').click();}});
 $('send').addEventListener('click',()=>{const question=$('text').value.trim();if(!question||$('send').disabled)return;if(!current())newChat();add('user',question);pending={id:active,question};previousOutput=$('output').textContent;lastAnswer='';$('text').value='';});
-const output=$('output');const observer=new MutationObserver(()=>{if(!pending)return;const value=output.textContent.trim();if(!value||value===previousOutput||value==='（空の回答）')return;lastAnswer=value;});
+const settings=$('zeroInput').querySelector('.settings');if(settings)$('zeroModel').append(settings);for(const label of [...$('zeroInput').querySelectorAll('label[style]')])$('zeroModel').append(label);const test=$('mathCheck');if(test)$('zeroModel').append(test);const output=$('output');const observer=new MutationObserver(()=>{if(!pending)return;const value=output.textContent.trim();if(!value||value===previousOutput||value==='（空の回答）')return;lastAnswer=value;});
 observer.observe(output,{childList:true,characterData:true,subtree:true});
 const send=$('send');new MutationObserver(()=>{if(!pending||send.disabled)return;const p=pending;pending=null;const answer=output.textContent.trim();if(answer&&answer!==previousOutput){const c=chats.find(x=>x.id===p.id);if(c){c.messages.push({role:'assistant',text:answer});persist();if(active===p.id)render();}}}).observe(send,{attributes:true,attributeFilter:['disabled']});
 $('stop').addEventListener('click',()=>{pending=null;});
