@@ -4,6 +4,7 @@ import {ZeroAIModel,sample} from './model.js';
 import {logProbability,paraphraseNumericQuestion} from './quality_v17.js';
 import {rankV18,relationParaphrases} from './quality_v18.js';
 import {routeMath} from './math_v18_fix.js';
+import {makeConversationPrompt,HISTORY_TOKEN_LIMIT} from './context_memory.js';
 let model=null,tok=null;
 function report(type,fields={}){self.postMessage({type,...fields});}
 self.onmessage=async event=>{
@@ -13,7 +14,7 @@ self.onmessage=async event=>{
       model=new ZeroAIModel(d.manifest,d.weights);tok=new ByteLevelBPE(d.tokenizer);
       for(const [token,id] of Object.entries(d.manifest.special_token_ids))
         if(tok.special[token]!==id)throw Error('Tokenizer special ID mismatch: '+token);
-      report('ready',{step:d.manifest.checkpoint_step,vocab:model.cfg.vocab_size,context:model.cfg.block_size});
+      report('ready',{step:d.manifest.checkpoint_step,vocab:model.cfg.vocab_size,context:model.cfg.block_size,historyLimit:HISTORY_TOKEN_LIMIT});
     }else if(d.type==='generate'){
       if(!model||!tok)throw Error('Model not loaded');
       const question=String(d.question||'').trim();
@@ -24,12 +25,17 @@ self.onmessage=async event=>{
       const nCandidates=Math.max(1,Math.min(4,Math.trunc(Number(d.candidates)||1)));
       const alt=codeMode?paraphraseNumericQuestion(question):null;
       const questions=codeMode?(alt?[question,alt]:[question]):[question,...relationParaphrases(question)];
-      const starts=questions.map(q=>{
-        const ids=tok.encode(`<user>\n${q}\n<bot>\n`);
-        if(ids.length>=model.cfg.block_size-1)throw Error('入力が長すぎます。512トークン以下にしてください');
-        const session=model.session();return {session,logits:session.prefill(ids),length:ids.length};
+      // Keep up to 10k tokens of dialogue history in the browser. The trained
+      // model still has 512 native positions: recent complete turns are used.
+      const wantedOutput=Math.max(8,Math.min(160,Math.trunc(Number(d.maxTokens)||64)));
+      const contextData=questions.map(q=>makeConversationPrompt(
+        tok,d.history,q,model.cfg.block_size,wantedOutput));
+      report('notice',{text:`会話履歴最大10,000 tokens・推論窓${model.cfg.block_size} tokens。直近${contextData[0].keptTurns}往復を参照します。`});
+      const starts=contextData.map(ctx=>{
+        const session=model.session();
+        return {session,logits:session.prefill(ctx.ids),length:ctx.ids.length,ctx};
       });
-      const maxNew=Math.min(Math.max(1,Math.trunc(Number(d.maxTokens)||64)),model.cfg.block_size-Math.max(...starts.map(x=>x.length)));
+      const maxNew=Math.min(wantedOutput,model.cfg.block_size-Math.max(...starts.map(x=>x.length)));
       const stopIds=new Set([tok.special['<end>'],tok.special['<user>'],tok.special['<bot>'],tok.special['<eof>']]);
       const candidates=[];
       for(let c=0;c<nCandidates;c++){
@@ -58,7 +64,12 @@ self.onmessage=async event=>{
       report('done',{output:picked.text,tokens:picked.tokens,
         bestIndex:result.index,candidates:candidates.map((c,i)=>({text:c.text,tokens:c.tokens,
         avgLogprob:c.avgLogprob,score:result.reports[i].score,reason:result.reports[i].reason,
-        selected:i===result.index,source:c.source})),verification:result.reports[result.index].verification,source:'gpt',question,codeMode});
+        selected:i===result.index,source:c.source})),verification:result.reports[result.index].verification,source:'gpt',question,codeMode,
+        contextInfo:{historyLimit:HISTORY_TOKEN_LIMIT,nativeContext:model.cfg.block_size,
+        retainedHistoryTokens:contextData[0].retainedHistoryTokens,
+        usedHistoryTokens:starts[result.index%starts.length]?.ctx.usedHistoryTokens||0,
+        keptTurns:contextData[0].keptTurns,
+        truncatedQuestion:contextData[0].truncatedQuestion}});
     }
   }catch(e){report('error',{error:String(e?.message||e)});}
 };
