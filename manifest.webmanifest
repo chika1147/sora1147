@@ -1,1 +1,19 @@
-{"name":"ZeroAI — 完全オフライン","short_name":"ZeroAI","description":"自作GPTを端末内で実行するWebアプリ","id":"./","start_url":"./","scope":"./","display":"standalone","background_color":"#091526","theme_color":"#091526","icons":[{"src":"icon.png","sizes":"192x192","type":"image/png","purpose":"any maskable"}]}
+{
+  "name": "ZeroAI v1.8 MathFix",
+  "short_name": "ZeroAI",
+  "description": "端末内で自作GPTの回答を生成し、四則演算は安全なローカル計算で検証するアプリ",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#091526",
+  "theme_color": "#091526",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

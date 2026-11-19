@@ -1,3 +1,4 @@
+import {routeMath,solveDirectMath} from './math_v18_fix.js';
 const $=id=>document.getElementById(id);
 const status=$('status'), message=$('message'), output=$('output');
 const dbName='zeroai-offline-v1'; // v1.6 IndexedDB checkpoint remains intact!
@@ -14,17 +15,17 @@ async function loadCurrentModel(){
   const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?mathfix=20261119',{type:'module'});
   worker.onmessage=e=>{
     const d=e.data;
-    if(d.type==='ready'){loaded=true;show(`ZeroAI v1.7準備完了｜${d.step} step｜文脈${d.context} tokens`,'ok');setBusy(false);}
+    if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8準備完了｜${d.step} step｜文脈${d.context} tokens`,'ok');setBusy(false);}
     if(d.type==='notice'){message.textContent=d.text;}
     if(d.type==='progress'){output.textContent=d.output;}
     if(d.type==='done'){
       output.textContent=d.output||'（空の回答）';
-      message.textContent=`${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
+      message.textContent=d.source==='local_calculation' ? (d.math.kind==='arithmetic_error' ? `計算不可：${d.math.answer}（ZeroAIの推測は使っていません）` : `【Webローカル計算で検証済み】${d.math.expression} = ${d.math.value}（AIの推測ではありません）`) : `${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
       $('diagnostics').textContent=d.candidates.map((c,i)=>`候補${i+1}${c.selected?' 【採用】':''}  score=${c.score.toFixed(3)}  logp=${c.avgLogprob.toFixed(3)}  ${c.source||'原文'}\n${c.reason}\n${c.text}`).join('\n\n');
-      comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:'v1.7-web'});
+      comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:'v1.8-web'});
       setBusy(false);
       if($('speak').checked&&d.output&&!/```/.test(d.output)){
         speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(d.output);say.lang='ja-JP';say.rate=0.95;speechSynthesis.speak(say);
@@ -57,20 +58,42 @@ $('import').addEventListener('change',async e=>{
 $('send').addEventListener('click',()=>{
   if(!loaded||busy)return;
   const question=$('text').value.trim();if(!question)return;
+  // Always intercept plain arithmetic, even when Python-code-mode is ON
+  // or the optional word-problem checkbox is OFF.
+  const codeMode=$('codeMode').checked||/(Python|コード|関数|def\s+)/i.test(question);
+  const local=routeMath(question,{codeMode,wordProblems:$('mathMode').checked});
+  if(local){
+    output.textContent=local.answer;
+    message.textContent=local.kind==='arithmetic_error'
+      ? `【計算できません】${local.answer} ／ AIによる推測回答は出しません。`
+      : `【Webローカル計算で検証済み】${local.expression} = ${local.value} ／ AIによる推測回答ではありません。`;
+    $('diagnostics').textContent=`入力: ${question}\n処理: ${local.kind}\n式: ${local.expression}\n結果: ${local.value||'計算不可'}\nエンジン: JavaScript BigInt (外部APIなし)`;
+    comparisons.push({question,answer:local.answer,source:'local_calculation',expression:local.expression,value:local.value});
+    return;
+  }
   output.textContent='';message.textContent='端末内で候補生成中。通信は使用しません。';setBusy(true);
   worker.postMessage({type:'generate',question,maxTokens:Number($('maxTokens').value),
     temperature:Number($('temperature').value),topK:Math.max(1,Number($('topK').value)),
-    candidates:Number($('candidates').value),topP:0.95,codeMode:$('codeMode').checked||/(Python|コード|関数|def\s+)/i.test(question)});
+    candidates:Number($('candidates').value),useMath:$('mathMode').checked,topP:0.95,codeMode:codeMode});
 });
 $('stop').addEventListener('click',()=>{if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
 $('clear').addEventListener('click',async()=>{if(!confirm('端末に保存したモデルを削除しますか？'))return;await dbClear();if(worker)worker.terminate();worker=null;loaded=false;output.textContent='';show('モデルを削除しました。');setBusy(false);});
 $('read').addEventListener('click',()=>{const text=output.textContent.trim();if(!text)return;speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(text);say.lang='ja-JP';speechSynthesis.speak(say);});
 $('export').addEventListener('click',()=>{
   if(!comparisons.length){message.textContent='まず1つ以上の質問を生成してね。';return;}
-  const blob=new Blob([JSON.stringify({version:'v1.7-web',records:comparisons},null,2)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify({version:'v1.8-web',records:comparisons},null,2)],{type:'application/json'});
   const link=document.createElement('a');link.href=URL.createObjectURL(blob);
-  link.download='zeroai_web_results_v17.json';link.click();URL.revokeObjectURL(link.href);
+  link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?mathfix=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
+
+const mathCheck=$('mathCheck');
+if(mathCheck) mathCheck.addEventListener('click',()=>{
+  const q='125 * 24';
+  const result=solveDirectMath(q);
+  output.textContent=result?.answer||'数式エンジンの検出に失敗しました。';
+  message.textContent=result?.value==='3000'?'【計算テスト合格】3000 / Webローカル計算':'【計算テスト失敗】';
+  $('diagnostics').textContent=`MathFix 2026-11-19 / test=${q} / expected=3000 / actual=${result?.value||'none'}`;
+});
