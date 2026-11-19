@@ -18,10 +18,10 @@ async function loadCurrentModel(){
   const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?longhistory=20261119',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?context10000=20261119',{type:'module'});
   worker.onmessage=e=>{
     const d=e.data;
-    if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8準備完了｜${d.step} step｜モデル文脈 ${d.context} tokens｜会話履歴 最大${d.historyLimit||10000} tokens`,'ok');setBusy(false);}
+    if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8 実験的推論文脈 最大${d.context.toLocaleString()} tokens｜学習時${d.trainedContext} tokens｜${d.step} step`,'ok');setBusy(false);}
     if(d.type==='notice'){message.textContent=d.text;}
     if(d.type==='progress'){output.textContent=d.output;bridge('progress',{id:activeRequestId,text:d.output||''});}
     if(d.type==='done'){
@@ -29,7 +29,7 @@ async function loadCurrentModel(){
       message.textContent=d.source==='local_calculation' ? (d.math.kind==='arithmetic_error' ? `計算不可：${d.math.answer}（ZeroAIの推測は使っていません）` : `【Webローカル計算で検証済み】${d.math.expression} = ${d.math.value}（AIの推測ではありません）`) : `${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
       $('diagnostics').textContent=d.candidates.map((c,i)=>`候補${i+1}${c.selected?' 【採用】':''}  score=${c.score.toFixed(3)}  logp=${c.avgLogprob.toFixed(3)}  ${c.source||'原文'}\n${c.reason}\n${c.text}`).join('\n\n');
       comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:'v1.8-web'});
-      bridge('answer',{id:activeRequestId,question:d.question,answer:d.output||'（空の回答）',source:d.source||'model'});
+      bridge('answer',{id:activeRequestId,question:d.question,answer:d.output||'（空の回答）',source:d.source||'model',contextInfo:d.contextInfo||null});
       activeRequestId=null;
       setBusy(false);
       if($('speak').checked&&d.output&&!/```/.test(d.output)){
@@ -71,6 +71,7 @@ $('send').addEventListener('click',()=>{
   const history=typeof window.zeroaiGetHistory==='function'?window.zeroaiGetHistory():[];
   const requestId=++requestSequence;
   activeRequestId=requestId;
+  const priorHistory=typeof window.ZeroAIChatHistory==='function'?window.ZeroAIChatHistory():[];
   bridge('question',{id:requestId,question,source:local?'local_calculation':'model'});
   if(local){
     output.textContent=local.answer;
@@ -86,7 +87,8 @@ $('send').addEventListener('click',()=>{
   output.textContent='';message.textContent='端末内で候補生成中。通信は使用しません。';setBusy(true);
   worker.postMessage({type:'generate',question,history,maxTokens:Number($('maxTokens').value),
     temperature:Number($('temperature').value),topK:Math.max(1,Number($('topK').value)),
-    candidates:Number($('candidates').value),useMath:$('mathMode').checked,topP:0.95,codeMode:codeMode});
+    candidates:Number($('candidates').value),useMath:$('mathMode').checked,topP:0.95,codeMode:codeMode,
+    history:priorHistory,contextLimit:Math.max(512,Math.min(10000,Number($('contextLimit')?.value)||10000))});
 });
 $('stop').addEventListener('click',()=>{if(activeRequestId!==null)bridge('error',{id:activeRequestId,error:'生成を停止しました。'});activeRequestId=null;if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
 $('clear').addEventListener('click',async()=>{if(!confirm('端末に保存したモデルを削除しますか？'))return;await dbClear();if(worker)worker.terminate();worker=null;loaded=false;output.textContent='';show('モデルを削除しました。');setBusy(false);});
@@ -98,7 +100,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?longhistory=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?context10000=20261119',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
