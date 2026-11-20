@@ -29,7 +29,7 @@ async function loadCurrentModel(){
   const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?longtrainfix=20261120',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?qualityfix=20261120',{type:'module'});
   worker.onmessage=e=>{
     const d=e.data;
     if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8 実験的推論文脈 最大${d.context.toLocaleString()} tokens｜学習時${d.trainedContext} tokens｜${d.step} step`,'ok');setBusy(false);}
@@ -45,7 +45,11 @@ async function loadCurrentModel(){
       output.textContent=d.output||'（空の回答）';
       message.textContent=d.source==='local_calculation' ? (d.math.kind==='arithmetic_error' ? `計算不可：${d.math.answer}（ZeroAIの推測は使っていません）` : `【Webローカル計算で検証済み】${d.math.expression} = ${d.math.value}（AIの推測ではありません）`) : `${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
       $('diagnostics').textContent=d.candidates.map((c,i)=>`候補${i+1}${c.selected?' 【採用】':''}  score=${c.score.toFixed(3)}  logp=${c.avgLogprob.toFixed(3)}  ${c.source||'原文'}\n${c.reason}\n${c.text}`).join('\n\n');
-      comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:'v1.8-web'});
+      if(d.qualityWarning){
+        message.textContent='回答品質の警告：'+d.qualityWarning.reason+'。原因確認は「設定・モデル管理」の診断情報からできます。';
+        $('diagnostics').textContent='【品質検出】'+d.qualityWarning.code+'\n【元の生成内容】\n'+String(d.rawOutput||'')+'\n\n'+$('diagnostics').textContent;
+      }
+      comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:'v1.8-web',qualityWarning:d.qualityWarning||null});
       bridge('answer',{id:activeRequestId,question:d.question,answer:d.output||'（空の回答）',source:d.source||'model',contextInfo:d.contextInfo||null});
       activeRequestId=null;
       setBusy(false);
@@ -117,7 +121,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?longtrainfix=20261120',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?qualityfix=20261120',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
