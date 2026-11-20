@@ -25,7 +25,8 @@ self.onmessage=async event=>{
       const requestedCandidates=Math.max(1,Math.min(4,Math.trunc(Number(d.candidates)||1)));
       const wantedOutput=Math.max(8,Math.min(160,Math.trunc(Number(d.maxTokens)||64)));
       const requestedLimit=Math.trunc(Number(d.contextLimit)||model.maxContext);
-      const contextLimit=Math.max(model.trainedContext,Math.min(model.maxContext,requestedLimit));
+      // A newly trained 1024/2048 model must still allow an independent 512-token stable mode.
+      const contextLimit=Math.max(512,Math.min(model.maxContext,requestedLimit));
       const alt=codeMode?paraphraseNumericQuestion(question):null;
       let questions=codeMode?(alt?[question,alt]:[question]):[question,...relationParaphrases(question)];
       report('phase',{stage:'tokenize',text:'文章をトークンに変換しています…'});
@@ -39,7 +40,8 @@ self.onmessage=async event=>{
         tok,d.history,q,contextLimit,wantedOutput));
       const maxNew=Math.min(wantedOutput,contextLimit-Math.max(...contextData.map(c=>c.ids.length)));
       if(maxNew<1)throw Error('No tokens left for generating the answer');
-      report('notice',{text:`実験的な最大${contextLimit.toLocaleString()}トークン文脈で推論。学習時は${model.trainedContext}。今回${primary.ids.length}入力トークンを全注意で処理します。`});
+      const exceedsTrained=primary.ids.length>model.trainedContext;
+      report('notice',{text:`${exceedsTrained?'【未学習の長文領域を使用】':'【学習済みの文脈内】'} 入力 ${primary.ids.length.toLocaleString()} tokens / 上限 ${contextLimit.toLocaleString()} tokens。モデルの学習時文脈は${model.trainedContext} tokensです。`});
       const starts=[];
       for(let i=0;i<contextData.length;i++){
         const ctx=contextData[i];
