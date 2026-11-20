@@ -44,6 +44,7 @@ export class ByteLevelBPE {
     for(const item of (data.added_tokens||[])) if(item.special) {this.special[item.content]=item.id;this.specialReverse.set(item.id,item.content);}
     for(const tok of ['<user>','<bot>','<end>','<eof>']) if(!Number.isInteger(this.special[tok])) throw Error('Missing token '+tok);
     this.specialSorted = Object.keys(this.special).sort((a,b)=>b.length-a.length);
+    this.byteCache=new Map();
   }
   encode(text) {
     const output=[];
@@ -84,6 +85,33 @@ export class ByteLevelBPE {
         output.push(id);
       }
     }
+  }
+  tokenBytes(id){
+    if(this.specialReverse.has(id))return null;
+    if(this.byteCache.has(id))return this.byteCache.get(id);
+    const symbol=this.reverse[id];
+    if(typeof symbol!=='string')return null;
+    const bytes=[];
+    for(const ch of symbol){
+      const byte=alphabetBytes.get(ch);
+      if(byte===undefined)throw Error('Tokenizer byte symbol is invalid');
+      bytes.push(byte);
+    }
+    const result=Uint8Array.from(bytes);
+    this.byteCache.set(id,result);
+    return result;
+  }
+  decodePartial(ids){
+    const bytes=[];
+    for(const id of ids){
+      if(this.specialReverse.has(id))continue;
+      const token=this.tokenBytes(id);
+      if(!token)throw Error('Unknown token ID: '+id);
+      for(const b of token)bytes.push(b);
+    }
+    // stream:true does not turn an unfinished final Japanese byte sequence
+    // into U+FFFD during partial rendering. The next token may complete it.
+    return new TextDecoder('utf-8').decode(Uint8Array.from(bytes),{stream:true});
   }
   decode(ids,{skipSpecial=true}={}) {
     const bytes=[];let result='';
