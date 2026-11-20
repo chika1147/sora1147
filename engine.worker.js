@@ -5,6 +5,7 @@ import {logProbability,paraphraseNumericQuestion} from './quality_v17.js';
 import {rankV18,relationParaphrases} from './quality_v18.js';
 import {routeMath} from './math_v18_fix.js';
 import {makeConversationPrompt,HISTORY_TOKEN_LIMIT} from './context_memory.js';
+import {checkGeneratedQuality} from './quality_guard.js';
 let model=null,tok=null;
 function report(type,fields={}){self.postMessage({type,...fields});}
 self.onmessage=async event=>{
@@ -68,9 +69,13 @@ self.onmessage=async event=>{
         const start=starts[variant];
         const session=nCandidates===1?start.session:start.session.clone();let logits=start.logits;
         let result=[],sumLP=0,stopped=false;
-        const deterministic=(c===0||(useAlt&&c===1));
-        const temp=(deterministic?0.45:(Number(d.temperature)||0.62));
-        const topK=(deterministic?1:Math.max(2,Number(d.topK)||25));
+        // Use controlled sampling for the 10k experimental mode; greedy Top-1
+        // causes pathological self-repetition in long untrained contexts.
+        const deterministic=!largePrompt&&(c===0||(useAlt&&c===1));
+        const temp=largePrompt?Math.max(0.68,Math.min(0.9,Number(d.temperature)||0.72))
+          :(deterministic?0.45:(Number(d.temperature)||0.62));
+        const topK=largePrompt?Math.max(15,Math.min(40,Math.trunc(Number(d.topK)||25)))
+          :(deterministic?1:Math.max(2,Number(d.topK)||25));
         const topP=(deterministic?1:(Number(d.topP)||0.95));
         report('notice',{text:`端末内で候補 ${c+1}/${nCandidates} を生成中…${useAlt?'（質問を言い換え）':''}`});
         for(let t=0;t<maxNew&&session.pos<session.capacity;t++){
@@ -85,14 +90,29 @@ self.onmessage=async event=>{
       }
       report('phase',{stage:'rank',text:'生成結果を確認しています…'});
       const result=rankV18(question,candidates,codeMode);
-      const picked=candidates[result.index];
-      report('done',{output:picked.text,tokens:picked.tokens,
-        bestIndex:result.index,candidates:candidates.map((c,i)=>({text:c.text,tokens:c.tokens,
+      const checks=candidates.map(c=>checkGeneratedQuality(c.text));
+      let selectedIndex=result.index;
+      if(!checks[selectedIndex].ok){
+        const valid=candidates.map((c,i)=>({i,score:result.reports[i].score}))
+          .filter(x=>checks[x.i].ok).sort((a,b)=>b.score-a.score);
+        if(valid.length)selectedIndex=valid[0].i;
+      }
+      const picked=candidates[selectedIndex],quality=checks[selectedIndex];
+      // Do not pretend corrupt or looping output is a valid model answer.
+      // Original text remains accessible in diagnostics for debugging.
+      const displayed=quality.ok?picked.text:
+        'ZeroAIの回答が不安定になりました（'+quality.reason+'）。'+
+        '正確な回答を作れなかったため、出力を停止しました。'+
+        '512トークン（安定版）または短い文章で再試行してください。';
+      report('done',{output:displayed,rawOutput:picked.text,
+        qualityWarning:quality.ok?null:{code:quality.code,reason:quality.reason},
+        tokens:picked.tokens,
+        bestIndex:selectedIndex,candidates:candidates.map((c,i)=>({text:c.text,tokens:c.tokens,
         avgLogprob:c.avgLogprob,score:result.reports[i].score,reason:result.reports[i].reason,
-        selected:i===result.index,source:c.source})),verification:result.reports[result.index].verification,source:'gpt',question,codeMode,
+        selected:i===selectedIndex,source:c.source})),verification:result.reports[selectedIndex].verification,source:'gpt',question,codeMode,
         contextInfo:{historyLimit:HISTORY_TOKEN_LIMIT,inferenceContext:contextLimit,trainedContext:model.trainedContext,experimental:true,
         retainedHistoryTokens:contextData[0].retainedHistoryTokens,
-        usedHistoryTokens:starts[result.index%starts.length]?.ctx.usedHistoryTokens||0,
+        usedHistoryTokens:starts[selectedIndex%starts.length]?.ctx.usedHistoryTokens||0,
         promptTokens:contextData[0].promptTokenCount,keptTurns:contextData[0].keptTurns,
         truncatedQuestion:contextData[0].truncatedQuestion}});
     }
