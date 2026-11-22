@@ -9,7 +9,7 @@ let activeModelStep=null,activeModelSlot='original';
 const modelKeys=slot=>slot==='experiment'
   ?{manifest:'experimental_manifest',tokenizer:'experimental_tokenizer',weights:'experimental_weights'}
   :{manifest:'manifest',tokenizer:'tokenizer',weights:'weights'};
-const modelVersion=step=>Number(step)===43531?'v1.9.1 実験版':'v1.8 / '+String(step||'?')+' step';
+const modelVersion=step=>Number(step)===44131?'v1.9.2 実験版（44,131 step）':Number(step)===43531?'v1.9.1 実験版':'v1.8 / '+String(step||'?')+' step';
 // Chat shell event bridge. The engine stays independent of the UI.
 let requestSequence=0,activeRequestId=null;
 let inactivityWarningTimer=null;
@@ -210,7 +210,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v191.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?predicatefix=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?v192label=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
