@@ -74,6 +74,16 @@ export function judgeAnswerRelevance(question,answer){
     if(!startsYesNo&&!subjectMentioned&&!predicateMentioned&&text.length>0){
       score-=1.8;
       findings.push('はい・いいえ、主語、質問内容のいずれも回答に見つかりません');
+      // Conservative guard for obviously unrelated, sprawling enumerations.
+      // Short answers, admissions of uncertainty, and code tasks are exempt.
+      const listItems=text.split(/[、，,]/u).filter(x=>x.trim().length>0);
+      const uncertainty=/(?:分かりません|わかりません|不明です|確認できません|判断できません|答えられません|確信がありません)/u.test(text);
+      const codeTask=/(?:Python|コード|プログラム|関数|実装|スクリプト)/iu.test(q);
+      if(!uncertainty&&!codeTask&&text.length>=24&&listItems.length>=4){
+        score-=8.2;
+        severe=true;
+        findings.push('質問の話題に触れず、関連の確認できない言葉を長く列挙しています');
+      }
     }
   }
   return {score,severe,findings,checked:true,factChecked:false};
