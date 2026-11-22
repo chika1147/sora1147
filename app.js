@@ -1,4 +1,5 @@
 import {routeMath,solveDirectMath} from './math_v18_fix.js';
+import {finalizeResponse,UI_BUILD} from './response_gate.js';
 const $=id=>document.getElementById(id);
 const status=$('status'), message=$('message'), output=$('output');
 const dbName='zeroai-offline-v1'; // v1.6 IndexedDB checkpoint remains intact!
@@ -29,21 +30,39 @@ async function loadCurrentModel(){
   const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?relevancefix=20261122',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?qa3=20261122',{type:'module'});
   worker.onmessage=e=>{
-    const d=e.data;
-    if(d.type==='ready'){loaded=true;show(`ZeroAI v1.8 実験的推論文脈 最大${d.context.toLocaleString()} tokens｜学習時${d.trainedContext} tokens｜${d.step} step`,'ok');setBusy(false);}
+    let d=e.data;
+    if(d.type==='ready'){
+      if(d.engineBuild!==UI_BUILD){
+        loaded=false;setBusy(false);
+        show('古いZeroAIエンジンが残っています。Safariでこのタブを閉じ、更新版のURLから開き直してください。UI: '+UI_BUILD+' / エンジン: '+(d.engineBuild||'旧版'),'error');
+        return;
+      }
+      loaded=true;
+      show('ZeroAI '+UI_BUILD+'｜推論上限'+d.context.toLocaleString()+' tokens｜学習時'+d.trainedContext+' tokens｜'+d.step+' step','ok');
+      setBusy(false);
+    }
     if(d.type==='notice'){message.textContent=d.text;markWorkerAlive();}
     if(d.type==='phase'){message.textContent=d.text;markWorkerAlive();bridge('phase',{id:activeRequestId,stage:d.stage,text:d.text});}
     if(d.type==='prefill'){
       markWorkerAlive();
       bridge('prefill',{id:activeRequestId,done:d.done,total:d.total,percent:d.percent,variant:d.variant,variants:d.variants});
     }
-    if(d.type==='progress'){markWorkerAlive();output.textContent=d.output;bridge('progress',{id:activeRequestId,text:d.output||''});}
+    if(d.type==='progress'){
+      markWorkerAlive();
+      // The model's live tokens have NOT passed quality checks. Do not put
+      // unverified arithmetic or broken Japanese into chat history.
+      const tokens=Math.max(0,Number(d.tokens)||0);
+      bridge('progress',{id:activeRequestId,text:'回答生成中… '+tokens+' tokens（検証前）'});
+    }
     if(d.type==='done'){
       clearInactivityWarning();
+      // A second, independent gate on the UI thread. An older Worker,
+      // unexpected math route, or bad final token stream cannot bypass this.
+      d=finalizeResponse(d);
       output.textContent=d.output||'（空の回答）';
-      message.textContent=d.source==='local_calculation' ? (d.math.kind==='arithmetic_error' ? `計算不可：${d.math.answer}（ZeroAIの推測は使っていません）` : `【Webローカル計算で検証済み】${d.math.expression} = ${d.math.value}（AIの推測ではありません）`) : `${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
+      message.textContent=d.source==='local_calculation'&&!d.qualityWarning ? (d.math.kind==='arithmetic_error' ? `計算不可：${d.math.answer}（ZeroAIの推測は使っていません）` : `【Webローカル計算で検証済み】${d.math.expression} = ${d.math.value}（AIの推測ではありません）`) : `${d.candidates.length}候補からZeroAIの回答を選択／${d.tokens}トークン。${d.verification}`;
       $('diagnostics').textContent=d.candidates.map((c,i)=>`候補${i+1}${c.selected?' 【採用】':''}  score=${c.score.toFixed(3)}  logp=${c.avgLogprob.toFixed(3)}  ${c.source||'原文'}\n${c.reason}\n${c.text}`).join('\n\n');
       if(d.qualityWarning){
         message.textContent='回答品質の警告：'+d.qualityWarning.reason+'。原因確認は「設定・モデル管理」の診断情報からできます。';
@@ -53,7 +72,7 @@ async function loadCurrentModel(){
       bridge('answer',{id:activeRequestId,question:d.question,answer:d.output||'（空の回答）',source:d.source||'model',contextInfo:d.contextInfo||null});
       activeRequestId=null;
       setBusy(false);
-      if($('speak').checked&&d.output&&!/```/.test(d.output)){
+      if($('speak').checked&&!d.qualityWarning&&d.output&&!/```/.test(d.output)){
         speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(d.output);say.lang='ja-JP';say.rate=0.95;speechSynthesis.speak(say);
       }
     }
@@ -121,7 +140,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?relevancefix=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?qa3=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
