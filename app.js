@@ -1,5 +1,5 @@
 import {routeMath,solveDirectMath} from './math_v18_fix.js';
-import {finalizeResponse,UI_BUILD} from './response_gate.js';
+import {finalizeResponse,UI_BUILD} from './response_gate.js?qa5=20261122';
 const $=id=>document.getElementById(id);
 const status=$('status'), message=$('message'), output=$('output');
 const dbName='zeroai-offline-v1'; // v1.6 IndexedDB checkpoint remains intact!
@@ -30,17 +30,24 @@ async function loadCurrentModel(){
   const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?qa4=20261122',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?qa5=20261122',{type:'module'});
   worker.onmessage=e=>{
     let d=e.data;
     if(d.type==='ready'){
-      if(d.engineBuild!==UI_BUILD){
+      // QA3/QA4 have the same message format. A newer UI still runs its
+      // own final-output checks, even if an older Worker was cached.
+      const compatible=[UI_BUILD,'QA3-20261122','QA4-20261122'].includes(String(d.engineBuild||''));
+      if(!compatible){
         loaded=false;setBusy(false);
-        show('古いZeroAIエンジンが残っています。Safariでこのタブを閉じ、更新版のURLから開き直してください。UI: '+UI_BUILD+' / エンジン: '+(d.engineBuild||'旧版'),'error');
+        show('推論エンジンの形式が確認できません。UI: '+UI_BUILD+
+          ' / エンジン: '+(d.engineBuild||'旧版')+'。サイトを再読み込みしてください。','error');
         return;
       }
       loaded=true;
-      show('ZeroAI '+UI_BUILD+'｜推論上限'+d.context.toLocaleString()+' tokens｜学習時'+d.trainedContext+' tokens｜'+d.step+' step','ok');
+      const runtime=String(d.engineRuntimeBuild||d.engineBuild);
+      const mode=d.engineBuild===UI_BUILD?'':'（互換モード '+runtime+'）';
+      show('ZeroAI '+UI_BUILD+mode+'｜推論上限'+d.context.toLocaleString()+
+        ' tokens｜学習時'+d.trainedContext+' tokens｜'+d.step+' step','ok');
       setBusy(false);
     }
     if(d.type==='notice'){message.textContent=d.text;markWorkerAlive();}
@@ -140,7 +147,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?qa4=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?qa5=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');

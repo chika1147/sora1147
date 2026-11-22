@@ -145,7 +145,7 @@ window.addEventListener('zeroai:answer',event=>{
   const c=chats.find(c=>c.id===r.chatId);
   appendMessage(c,'assistant',answer||'（空の回答）');
   requests.delete(id);
-  setTopRuntime('● QA4 準備完了');
+  setTopRuntime('● QA5 準備完了');
   if(active===r.chatId)render();
 });
 window.addEventListener('zeroai:error',event=>{
@@ -160,7 +160,7 @@ window.addEventListener('zeroai:error',event=>{
 window.addEventListener('zeroai:status',event=>{
   const {text,state}=event.detail||{};
   const indicator=$('zeroTopState');
-  indicator.textContent=state==='ok'?(String(text||'').includes('QA4-20261122')?'● QA4 準備完了':'● 準備完了'):state==='error'?'● エラー':String(text||'モデル未登録').includes('未登録')?'● モデル未登録':'● '+String(text||'確認中').slice(0,14);
+  indicator.textContent=state==='ok'?(String(text||'').includes('QA5-20261122')?'● QA5 準備完了':'● 準備完了'):state==='error'?'● エラー':String(text||'モデル未登録').includes('未登録')?'● モデル未登録':'● '+String(text||'確認中').slice(0,14);
   indicator.title=String(text||'モデルの状態と設定を開く');
 });
 const settings=$('zeroInput').querySelector('.settings');

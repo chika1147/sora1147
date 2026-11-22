@@ -7,6 +7,16 @@ import {routeMath} from './math_v18_fix.js';
 import {makeConversationPrompt,HISTORY_TOKEN_LIMIT} from './context_memory.js';
 import {checkGeneratedQuality} from './quality_guard.js';
 import {newUtf8State,sampleUtf8Token} from './utf8_sampling.js';
+const ENGINE_RUNTIME_BUILD='QA5-20261122';
+// QA3 and QA4 UI scripts have the same generate protocol but insist on an
+// exact version label. Advertise the version that UI expects based on the
+// Worker script URL, while retaining the true runtime version separately.
+function compatibleBuildLabel(search=self.location.search){
+  const params=new URLSearchParams(search);
+  if(params.has('qa3'))return 'QA3-20261122';
+  if(params.has('qa4'))return 'QA4-20261122';
+  return ENGINE_RUNTIME_BUILD;
+}
 let model=null,tok=null;
 function report(type,fields={}){self.postMessage({type,...fields});}
 self.onmessage=async event=>{
@@ -16,7 +26,7 @@ self.onmessage=async event=>{
       model=new ZeroAIModel(d.manifest,d.weights);tok=new ByteLevelBPE(d.tokenizer);
       for(const [token,id] of Object.entries(d.manifest.special_token_ids))
         if(tok.special[token]!==id)throw Error('Tokenizer special ID mismatch: '+token);
-      report('ready',{engineBuild:'QA4-20261122',step:d.manifest.checkpoint_step,vocab:model.cfg.vocab_size,context:model.maxContext,trainedContext:model.trainedContext,historyLimit:HISTORY_TOKEN_LIMIT,experimental:true});
+      report('ready',{engineBuild:compatibleBuildLabel(),engineRuntimeBuild:ENGINE_RUNTIME_BUILD,step:d.manifest.checkpoint_step,vocab:model.cfg.vocab_size,context:model.maxContext,trainedContext:model.trainedContext,historyLimit:HISTORY_TOKEN_LIMIT,experimental:true});
     }else if(d.type==='generate'){
       if(!model||!tok)throw Error('Model not loaded');
       const question=String(d.question||'').trim();

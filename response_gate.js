@@ -4,7 +4,7 @@
 import {judgeAnswerRelevance} from './question_intent.js';
 import {checkGeneratedQuality} from './quality_guard.js';
 import {routeMath} from './math_v18_fix.js';
-export const UI_BUILD='QA4-20261122';
+export const UI_BUILD='QA5-20261122';
 export function finalizeResponse(packet){
   if(!packet||packet.type!=='done'||packet.qualityWarning)return packet;
   const question=String(packet.question||'');
