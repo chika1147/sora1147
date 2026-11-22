@@ -73,7 +73,7 @@ async function loadCurrentModel(){
   activeModelSlot=slot;activeModelStep=Number(man.checkpoint_step);
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?modelslots=20261122',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?modelslots2=20261122',{type:'module'});
   worker.onmessage=e=>{
     let d=e.data;
     if(d.type==='ready'){
@@ -134,6 +134,7 @@ async function loadCurrentModel(){
   const copied=bin.slice(0);worker.postMessage({type:'load',manifest:man,tokenizer:tok,weights:copied},[copied]);
 }
 $('import').addEventListener('change',async e=>{
+  if(busy){show('回答生成中はモデルを取り込めません。停止してから実行してください。','error');e.target.value='';return;}
   const files=Array.from(e.target.files||[]);
   if(!files.length)return;
   try{
@@ -160,7 +161,7 @@ $('import').addEventListener('change',async e=>{
   }catch(error){show(String(error?.message||error),'error');}
   e.target.value='';
 });
-$('changeModel').addEventListener('click',async()=>{
+$('changeModel')?.addEventListener('click',async()=>{
   if(busy){show('回答生成中はモデルを切り替えられません。','error');return;}
   const next=$('activeModelSlot').value,keys=modelKeys(next);
   if(!await dbGet(keys.manifest)){show('選択したモデルは未登録です。','error');return;}
@@ -209,7 +210,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v191.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?modelslots=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?modelslots2=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
