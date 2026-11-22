@@ -1,6 +1,6 @@
 // v1.8 extra intent signals: no fixed fact lookup or external AI.
 import {scoreCandidate} from './quality_v17.js';
-import {judgeAnswerConsistency,judgeAnswerRelevance} from './question_intent.js';
+import {judgeAnswerConsistency,judgeAnswerRelevance} from './question_intent.js?predicatefix=20261122';
 export function relationParaphrases(q){
   const m=String(q).trim().match(/^(.{1,35}?)はどこの国の首都(?:ですか)?[？?。\s]*(?:国名を答えてください[。.]?)?$/);
   if(!m)return [];

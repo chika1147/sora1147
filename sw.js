@@ -1,6 +1,6 @@
 // ZeroAI v1.8 MathFix / cache updated JS and force offline-capable assets.
 // Revision bump invalidates prior v1.7/v1.8 cached math code.
-const CACHE='zeroai-offline-v1-9-1-modelslots2-20261122';
+const CACHE='zeroai-offline-v1-9-1-predicatefix-20261122';
 const APP=['./','./index.html','./app.js','./chat_shell.js','./engine.worker.js','./tokenizer.js',
  './model.js','./quality_v17.js','./quality_v18.js','./question_intent.js','./response_gate.js','./math_v18_fix.js','./context_memory.js','./quality_guard.js','./utf8_sampling.js',
  './manifest.webmanifest','./icon.png','./icon.svg'];

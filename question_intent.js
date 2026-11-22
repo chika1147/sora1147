@@ -13,17 +13,20 @@ export function identifyQuestion(question){
   const relation=q.match(/^(.{1,45}?)は(.{1,90})$/u);
   return {kind:wh?'wh':polar?'polar':'other',subject:relation?.[1]?.trim()||null,hasNegation:NEG.test(q)};
 }
-function statementAboutSameSubject(answer,subject){
-  if(!subject)return null;
+// Compare the question's predicate, not just the same subject.
+// For "犬は植物ですか？", "いいえ。犬は動物です。" is NOT a contradiction.
+// This checks word-level consistency, never the truth of the facts.
+function statementAboutSameSubject(answer,subject,predicate){
+  if(!subject||!predicate)return null;
   const pattern=subject+'は';
   const index=answer.indexOf(pattern);
   if(index<0)return null;
-  const rest=answer.slice(index+pattern.length).split(/[。.!！\n]/u,1)[0];
-  if(!rest.trim())return null;
-  // Report only an explicit affirmative/negative statement. Unclear text
-  // isn't treated as a contradiction; no factual knowledge is inferred.
-  const negative=NEG.test(rest);
-  const positive=!negative&&/(?:です|だ|である|になります|となります|といえます)\s*$/u.test(rest.trim());
+  const rest=answer.slice(index+pattern.length).split(/[。.!！\n]/u,1)[0].trim();
+  if(!rest.startsWith(predicate))return null;
+  const tail=rest.slice(predicate.length).trim();
+  const negative=/^(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|でない|でありません|でないです)/u.test(tail);
+  const positive=!negative&&/^(?:です|だ|である|になります|となります)(?:\s|$)/u.test(tail);
+  if(!negative&&!positive)return null;
   return {negative,positive};
 }
 export function judgeAnswerConsistency(question,answer){
@@ -36,7 +39,10 @@ export function judgeAnswerConsistency(question,answer){
     findings.push('情報を尋ねる質問に不要な「はい／いいえ」で答えています');
   }
   if(info.kind==='polar'&&(no||yes)&&!info.hasNegation){
-    const statement=statementAboutSameSubject(text,info.subject);
+    const q=String(question||'').trim().replace(/[？?。!！\s]+$/gu,'');
+    const relation=q.match(/^(.{1,45}?)は(.{1,90}?)ですか$/u);
+    const predicate=relation&&relation[1].trim()===info.subject?relation[2].trim():null;
+    const statement=statementAboutSameSubject(text,info.subject,predicate);
     if(statement){
       if(no&&statement.positive){
         score-=5;

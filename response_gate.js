@@ -1,7 +1,7 @@
 // Independent final-response gate on the main UI thread.
 // This is deliberately AFTER the Worker: stale workers and preliminary output
 // cannot bypass it when the current app.js is loaded. It does not know facts.
-import {judgeAnswerRelevance} from './question_intent.js';
+import {judgeAnswerRelevance} from './question_intent.js?predicatefix=20261122';
 import {checkGeneratedQuality} from './quality_guard.js';
 import {routeMath} from './math_v18_fix.js';
 export const UI_BUILD='QA5-20261122';

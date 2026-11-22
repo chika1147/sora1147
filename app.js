@@ -1,5 +1,5 @@
 import {routeMath,solveDirectMath} from './math_v18_fix.js';
-import {finalizeResponse,UI_BUILD} from './response_gate.js?qa5=20261122';
+import {finalizeResponse,UI_BUILD} from './response_gate.js?predicatefix=20261122';
 const $=id=>document.getElementById(id);
 const status=$('status'), message=$('message'), output=$('output');
 const dbName='zeroai-offline-v1'; // v1.6 IndexedDB checkpoint remains intact!
@@ -73,7 +73,7 @@ async function loadCurrentModel(){
   activeModelSlot=slot;activeModelStep=Number(man.checkpoint_step);
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?modelslots2=20261122',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?predicatefix=20261122',{type:'module'});
   worker.onmessage=e=>{
     let d=e.data;
     if(d.type==='ready'){
@@ -210,7 +210,7 @@ $('export').addEventListener('click',()=>{
   link.download='zeroai_web_results_v191.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?modelslots2=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?predicatefix=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
