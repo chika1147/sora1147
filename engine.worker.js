@@ -104,23 +104,26 @@ self.onmessage=async event=>{
       }
       report('phase',{stage:'rank',text:'生成結果を確認しています…'});
       const result=rankV18(question,candidates,codeMode);
-      const checks=candidates.map(c=>c.incompleteSuffixTokens>0
-        ?{ok:false,code:'incomplete_utf8',reason:'文字の途中で生成上限に達しました'}
-        :checkGeneratedQuality(c.text));
+      const checks=candidates.map((c,i)=>{
+        if(c.incompleteSuffixTokens>0)
+          return {ok:false,code:'incomplete_utf8',reason:'文字の途中で生成上限に達しました'};
+        const validity=checkGeneratedQuality(c.text);
+        if(!validity.ok)return validity;
+        const relevance=result.reports[i]?.relevance;
+        if(relevance?.severe)
+          return {ok:false,code:'unrelated_answer',reason:relevance.findings.join('・')};
+        const issues=result.reports[i]?.consistency?.findings||[];
+        if(issues.length)
+          return {ok:false,code:'answer_consistency',reason:issues.join('・')};
+        return validity;
+      });
       let selectedIndex=result.index;
       if(!checks[selectedIndex].ok){
         const valid=candidates.map((c,i)=>({i,score:result.reports[i].score}))
           .filter(x=>checks[x.i].ok).sort((a,b)=>b.score-a.score);
         if(valid.length)selectedIndex=valid[0].i;
       }
-      const picked=candidates[selectedIndex];
-      let quality=checks[selectedIndex];
-      // If every generated candidate contains an obvious self-contradiction,
-      // report uncertainty instead of presenting the contradictory claim as fact.
-      // This is answer consistency only, never a fact lookup.
-      const consistencyIssues=result.reports[selectedIndex]?.consistency?.findings||[];
-      if(quality.ok&&consistencyIssues.length)
-        quality={ok:false,code:'answer_consistency',reason:consistencyIssues.join('・')};
+      const picked=candidates[selectedIndex],quality=checks[selectedIndex];
       // Do not pretend corrupt or looping output is a valid model answer.
       // Original text remains accessible in diagnostics for debugging.
       const displayed=quality.ok?picked.text:
