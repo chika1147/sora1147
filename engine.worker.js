@@ -16,7 +16,7 @@ self.onmessage=async event=>{
       model=new ZeroAIModel(d.manifest,d.weights);tok=new ByteLevelBPE(d.tokenizer);
       for(const [token,id] of Object.entries(d.manifest.special_token_ids))
         if(tok.special[token]!==id)throw Error('Tokenizer special ID mismatch: '+token);
-      report('ready',{step:d.manifest.checkpoint_step,vocab:model.cfg.vocab_size,context:model.maxContext,trainedContext:model.trainedContext,historyLimit:HISTORY_TOKEN_LIMIT,experimental:true});
+      report('ready',{engineBuild:'QA3-20261122',step:d.manifest.checkpoint_step,vocab:model.cfg.vocab_size,context:model.maxContext,trainedContext:model.trainedContext,historyLimit:HISTORY_TOKEN_LIMIT,experimental:true});
     }else if(d.type==='generate'){
       if(!model||!tok)throw Error('Model not loaded');
       const question=String(d.question||'').trim();
