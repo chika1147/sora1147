@@ -50,3 +50,31 @@ export function judgeAnswerConsistency(question,answer){
   return {score,questionKind:info.kind,subject:info.subject,findings,
     checked:info.kind!=='other',factChecked:false};
 }
+
+
+// A generic relevance check: never insert a known answer or a factual lookup.
+// Only ask whether the output appears to respond to the kind of question.
+export function judgeAnswerRelevance(question,answer){
+  const q=String(question||'').trim(),text=String(answer||'').trim();
+  const info=identifyQuestion(q);
+  const isMathQuestion=/(?:\d\s*[+\-−×÷*/]\s*\d|計算|算数|合計|割り算|掛け算|足し算|引き算|何倍)/u.test(q);
+  const mathResponse=/(?:\d+(?:\.\d+)?\s*[+\-−×÷*/]\s*\d+|[+\-−×÷*/]\s*\d+\s*[＝=]\s*\d+|\d+\s*[＝=]\s*\d+)/u.test(text);
+  const findings=[];
+  let score=0,severe=false;
+  if(!isMathQuestion&&mathResponse){
+    severe=true;
+    score-=10;
+    findings.push('数字を計算していない質問に、無関係な数式で回答しています');
+  }
+  if(info.kind==='polar'&&!severe){
+    const startsYesNo=YES.test(text)||NO.test(text);
+    const subjectMentioned=!!info.subject&&text.includes(info.subject);
+    const predicate=q.match(/は(.{2,50}?)(?:ですか|ますか|でしょうか|なの)[？?。\s]*$/u)?.[1];
+    const predicateMentioned=!!predicate&&text.includes(predicate);
+    if(!startsYesNo&&!subjectMentioned&&!predicateMentioned&&text.length>0){
+      score-=1.8;
+      findings.push('はい・いいえ、主語、質問内容のいずれも回答に見つかりません');
+    }
+  }
+  return {score,severe,findings,checked:true,factChecked:false};
+}
