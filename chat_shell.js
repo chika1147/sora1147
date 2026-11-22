@@ -169,14 +169,16 @@ for(const label of [...$('zeroInput').querySelectorAll('label[style]')])$('zeroM
 for(const id of ['mathCheck','read','export']){
   const node=$(id);if(node)$('zeroModel').append(node);
 }
+let currentModelVersion='v1.8';
+window.addEventListener('zeroai:modelversion',event=>{currentModelVersion=event.detail?.version||'v1.8';refreshContextLabel();});
 const contextSelect=$('contextLimit');
 const contextLabel=$('zeroContextLabel');
 function refreshContextLabel(){
   if(!contextLabel||!contextSelect)return;
   const limit=Number(contextSelect.value);
   contextLabel.textContent=limit===512
-    ? 'v1.8 · 推論512（安定版）'
-    : 'v1.8 · 推論10,000（実験版）';
+    ? currentModelVersion+' · 推論512（安定版）'
+    : currentModelVersion+' · 推論10,000（実験版）';
 }
 if(contextSelect){contextSelect.addEventListener('change',refreshContextLabel);refreshContextLabel();}
 const status=$('status');

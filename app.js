@@ -5,6 +5,11 @@ const status=$('status'), message=$('message'), output=$('output');
 const dbName='zeroai-offline-v1'; // v1.6 IndexedDB checkpoint remains intact!
 let worker=null,loaded=false,busy=false;
 const comparisons=[];
+let activeModelStep=null,activeModelSlot='original';
+const modelKeys=slot=>slot==='experiment'
+  ?{manifest:'experimental_manifest',tokenizer:'experimental_tokenizer',weights:'experimental_weights'}
+  :{manifest:'manifest',tokenizer:'tokenizer',weights:'weights'};
+const modelVersion=step=>Number(step)===43531?'v1.9.1 実験版':'v1.8 / '+String(step||'?')+' step';
 // Chat shell event bridge. The engine stays independent of the UI.
 let requestSequence=0,activeRequestId=null;
 let inactivityWarningTimer=null;
@@ -23,14 +28,52 @@ function show(s,type='info'){status.textContent=s;status.dataset.state=type;brid
 function setBusy(value){busy=value;$('send').disabled=value||!loaded;$('stop').disabled=!value;$('text').disabled=value;}
 function dbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(dbName,1);r.onupgradeneeded=()=>r.result.createObjectStore('model');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function dbPut(name,value){const db=await dbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction('model','readwrite');tx.objectStore('model').put(value,name);tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>{db.close();reject(tx.error);};});}
+async function dbPutMany(entries){
+  const db=await dbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('model','readwrite'),store=tx.objectStore('model');
+    for(const [name,value] of entries)store.put(value,name);
+    tx.oncomplete=()=>{db.close();resolve();};
+    tx.onerror=()=>{const error=tx.error;db.close();reject(error);};
+    tx.onabort=()=>{const error=tx.error;db.close();reject(error||Error('モデルの保存が中断されました'));};
+  });
+}
 async function dbGet(name){const db=await dbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction('model','readonly');const r=tx.objectStore('model').get(name);r.onsuccess=()=>{db.close();resolve(r.result);};r.onerror=()=>{db.close();reject(r.error);};});}
 async function dbClear(){const db=await dbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction('model','readwrite');tx.objectStore('model').clear();tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>{db.close();reject(tx.error);};});}
 async function sha256(buffer){const digest=await crypto.subtle.digest('SHA-256',buffer);return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function getActiveSlot(){
+  const saved=await dbGet('active_slot');
+  return saved==='experiment'?'experiment':'original';
+}
+async function refreshModelSelector(slot){
+  const main=await dbGet('manifest'),experiment=await dbGet('experimental_manifest');
+  const select=$('activeModelSlot');
+  if(!select)return;
+  const mainOpt=select.querySelector('option[value="original"]');
+  const expOpt=select.querySelector('option[value="experiment"]');
+  mainOpt.textContent=main?'元モデル（'+main.checkpoint_step+' step）':'元モデル（未登録）';
+  expOpt.textContent=experiment?'実験モデル（'+experiment.checkpoint_step+' step）':'実験モデル（未登録）';
+  mainOpt.disabled=!main;expOpt.disabled=!experiment;
+  select.value=slot;
+  const current=slot==='experiment'?experiment:main;
+  $('modelVersionInfo').textContent=current
+    ?'現在の使用モデル：'+modelVersion(current.checkpoint_step)+'／'+current.checkpoint_step+' step。重みはこの端末にのみ保存。'
+    :'まだモデルがありません。ZIPを解凍し、3ファイルを取り込んでください。';
+}
 async function loadCurrentModel(){
-  const man=await dbGet('manifest'),tok=await dbGet('tokenizer'),bin=await dbGet('weights');
+  const slot=await getActiveSlot();
+  const keys=modelKeys(slot);
+  const [man,tok,bin]=await Promise.all([dbGet(keys.manifest),dbGet(keys.tokenizer),dbGet(keys.weights)]);
+  await refreshModelSelector(slot);
+  if(!man||!tok||!bin){
+    if(worker)worker.terminate();
+    worker=null;loaded=false;activeModelStep=null;setBusy(false);
+    show('モデル未登録。設定から3ファイルを取り込んでね。');return;
+  }
+  activeModelSlot=slot;activeModelStep=Number(man.checkpoint_step);
   if(!man||!tok||!bin){show('モデル未登録。下の3ファイルを読み込んでね。');return;}
   if(worker)worker.terminate();
-  loaded=false;worker=new Worker('./engine.worker.js?qa5=20261122',{type:'module'});
+  loaded=false;worker=new Worker('./engine.worker.js?modelslots=20261122',{type:'module'});
   worker.onmessage=e=>{
     let d=e.data;
     if(d.type==='ready'){
@@ -46,8 +89,9 @@ async function loadCurrentModel(){
       loaded=true;
       const runtime=String(d.engineRuntimeBuild||d.engineBuild);
       const mode=d.engineBuild===UI_BUILD?'':'（互換モード '+runtime+'）';
-      show('ZeroAI '+UI_BUILD+mode+'｜推論上限'+d.context.toLocaleString()+
-        ' tokens｜学習時'+d.trainedContext+' tokens｜'+d.step+' step','ok');
+      show('ZeroAI '+modelVersion(d.step)+'｜'+UI_BUILD+mode+
+        '｜推論上限'+d.context.toLocaleString()+' tokens｜学習時'+d.trainedContext+' tokens','ok');
+      bridge('modelversion',{version:modelVersion(d.step),step:d.step,slot:activeModelSlot});
       setBusy(false);
     }
     if(d.type==='notice'){message.textContent=d.text;markWorkerAlive();}
@@ -75,7 +119,7 @@ async function loadCurrentModel(){
         message.textContent='回答品質の警告：'+d.qualityWarning.reason+'。原因確認は「設定・モデル管理」の診断情報からできます。';
         $('diagnostics').textContent='【品質検出】'+d.qualityWarning.code+'\n【元の生成内容】\n'+String(d.rawOutput||'')+'\n\n'+$('diagnostics').textContent;
       }
-      comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:'v1.8-web',qualityWarning:d.qualityWarning||null});
+      comparisons.push({question:d.question,answer:d.output,candidates:d.candidates,codeMode:d.codeMode,model_step:man.checkpoint_step,version:modelVersion(man.checkpoint_step),qualityWarning:d.qualityWarning||null});
       bridge('answer',{id:activeRequestId,question:d.question,answer:d.output||'（空の回答）',source:d.source||'model',contextInfo:d.contextInfo||null});
       activeRequestId=null;
       setBusy(false);
@@ -102,10 +146,28 @@ $('import').addEventListener('change',async e=>{
     if(man.weight_float_count*4!==bin.byteLength)throw Error('モデルサイズが不一致です');
     const [tokHash,weightHash]=await Promise.all([sha256(new TextEncoder().encode(tokText)),sha256(bin)]);
     if(man.tokenizer_sha256!==tokHash||man.weights_sha256!==weightHash)throw Error('重みかトークナイザのSHA256が一致しません');
-    await dbPut('manifest',man);await dbPut('tokenizer',tok);await dbPut('weights',bin);
-    show('モデルを端末に保存したよ！','ok');await loadCurrentModel();
+    const hasOriginal=!!(await dbGet('manifest'));
+    const target=hasOriginal?'experiment':'original';
+    const keys=modelKeys(target);
+    // Atomic transaction: a failed large import must NEVER partially replace
+    // a model, and the previous original model is never overwritten.
+    await dbPutMany([
+      [keys.manifest,man],[keys.tokenizer,tok],[keys.weights,bin],
+      ['active_slot',target]
+    ]);
+    show('端末内にモデルを保存しました。元のモデルは保持されています。','ok');
+    await loadCurrentModel();
   }catch(error){show(String(error?.message||error),'error');}
   e.target.value='';
+});
+$('changeModel').addEventListener('click',async()=>{
+  if(busy){show('回答生成中はモデルを切り替えられません。','error');return;}
+  const next=$('activeModelSlot').value,keys=modelKeys(next);
+  if(!await dbGet(keys.manifest)){show('選択したモデルは未登録です。','error');return;}
+  try{
+    await dbPut('active_slot',next);
+    await loadCurrentModel();
+  }catch(err){show('モデル切替エラー：'+String(err?.message||err),'error');}
 });
 $('send').addEventListener('click',()=>{
   if(!loaded||busy)return;
@@ -138,16 +200,16 @@ $('send').addEventListener('click',()=>{
     contextLimit:Math.max(512,Math.min(10000,Number($('contextLimit')?.value)||10000))});
 });
 $('stop').addEventListener('click',()=>{clearInactivityWarning();if(activeRequestId!==null)bridge('error',{id:activeRequestId,error:'生成を停止しました。'});activeRequestId=null;if(worker)worker.terminate();worker=null;loaded=false;setBusy(false);show('生成を停止。モデルを再読み込み中…');loadCurrentModel().catch(e=>show(e.message,'error'));});
-$('clear').addEventListener('click',async()=>{if(!confirm('端末に保存したモデルを削除しますか？'))return;await dbClear();if(worker)worker.terminate();worker=null;loaded=false;output.textContent='';show('モデルを削除しました。');setBusy(false);});
+$('clear').addEventListener('click',async()=>{if(!confirm('端末内の元モデルと実験モデルを両方削除します。元に戻せません。本当に削除しますか？'))return;await dbClear();if(worker)worker.terminate();worker=null;loaded=false;output.textContent='';show('モデルを削除しました。');setBusy(false);});
 $('read').addEventListener('click',()=>{const text=output.textContent.trim();if(!text)return;speechSynthesis.cancel();const say=new SpeechSynthesisUtterance(text);say.lang='ja-JP';speechSynthesis.speak(say);});
 $('export').addEventListener('click',()=>{
   if(!comparisons.length){message.textContent='まず1つ以上の質問を生成してね。';return;}
   const blob=new Blob([JSON.stringify({version:'v1.8-web',records:comparisons},null,2)],{type:'application/json'});
   const link=document.createElement('a');link.href=URL.createObjectURL(blob);
-  link.download='zeroai_web_results_v18.json';link.click();URL.revokeObjectURL(link.href);
+  link.download='zeroai_web_results_v191.json';link.click();URL.revokeObjectURL(link.href);
 });
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))
-  navigator.serviceWorker.register('./sw.js?qa5=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
+  navigator.serviceWorker.register('./sw.js?modelslots=20261122',{updateViaCache:'none'}).catch(e=>console.warn('Offline cache unavailable',e));
 loadCurrentModel().catch(e=>show(String(e),'error'));
 
 const mathCheck=$('mathCheck');
