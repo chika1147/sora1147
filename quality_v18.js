@@ -1,6 +1,6 @@
 // v1.8 extra intent signals: no fixed fact lookup or external AI.
 import {scoreCandidate} from './quality_v17.js';
-import {judgeAnswerConsistency} from './question_intent.js';
+import {judgeAnswerConsistency,judgeAnswerRelevance} from './question_intent.js';
 export function relationParaphrases(q){
   const m=String(q).trim().match(/^(.{1,35}?)はどこの国の首都(?:ですか)?[？?。\s]*(?:国名を答えてください[。.]?)?$/);
   if(!m)return [];
@@ -25,11 +25,13 @@ export function rankV18(q,candidates,codeMode){
     if(codeMode)return base;
     const extra=intentScore(q,String(c.text||''));
     const consistency=judgeAnswerConsistency(q,String(c.text||''));
+    const relevance=judgeAnswerRelevance(q,String(c.text||''));
     const notes=consistency.findings.length?consistency.findings.join('・'):'目立つ自己矛盾は未検出';
-    return {...base,score:base.score+extra.score+consistency.score,
-      reason:base.reason+'／'+extra.reason+'／'+notes,
-      consistency,verification:base.verification+
-        '（質問タイプと文面の矛盾を検査。事実の正誤は未検証）'};
+    const relevanceNotes=relevance.findings.length?relevance.findings.join('・'):'質問との明白な形式不一致なし';
+    return {...base,score:base.score+extra.score+consistency.score+relevance.score,
+      reason:base.reason+'／'+extra.reason+'／'+notes+'／'+relevanceNotes,
+      consistency,relevance,verification:base.verification+
+        '（質問タイプ・自己矛盾・関連性を検査。事実の正誤は未検証）'};
   });
   let index=0;for(let i=1;i<reports.length;i++)if(reports[i].score>reports[index].score)index=i;
   return {index,reports};
